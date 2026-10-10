@@ -35,8 +35,13 @@ export class PetController {
   /**
    * 包裹一次 Agent 运行：
    * 提交（thinking）→ agent-start（working）→ 按结构化结果分派 success/error。
+   * 若调用方未先 inputStart()，这里会自动补全（从任意空闲态提交任务都语义正确）。
    */
   async runWithAgent(agent: SassDeskAgent, text: string, opts: { signal?: AbortSignal } = {}): Promise<AgentRunResult> {
+    const s = this.machine.state;
+    if (s === "idle" || s === "sleeping" || s === "success" || s === "error") {
+      this.machine.dispatch({ type: "input-start" });
+    }
     this.machine.dispatch({ type: "input-end" });
     this.machine.dispatch({ type: "agent-start" });
     const result = await agent.run(text, opts);

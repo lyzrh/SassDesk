@@ -1,0 +1,27 @@
+{
+  "$comment": "复制为 config.json（或更私密的 config.local.json）后按需修改。apiKey 留空则从环境变量读取。",
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "baseUrl": "",
+    "apiKey": "",
+    "maxIterations": 8,
+    "requestTimeoutMs": 120000
+  },
+  "voice": {
+    "provider": "mock",
+    "sttBaseUrl": "",
+    "sttModel": "whisper-1",
+    "recordTimeoutMs": 120000
+  },
+  "music": {
+    "qqmusicPath": ""
+  },
+  "character": {
+    "name": "大肥鱼"
+  },
+  "logging": {
+    "level": "info",
+    "dir": "logs"
+  }
+}

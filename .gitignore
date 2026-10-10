@@ -1,0 +1,26 @@
+# 依赖与构建产物
+node_modules/
+dist/
+coverage/
+
+# 密钥与私密配置（绝不提交）
+.env
+.env.local
+.env.*.local
+config.local.json
+*credentials*.json
+auth.json
+
+# 运行时数据与日志
+data/
+logs/
+*.log
+
+# 语音音频（个人数据）
+*.wav
+*.mp3
+recordings/
+
+# 系统文件
+Thumbs.db
+.DS_Store

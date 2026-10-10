@@ -1,0 +1,40 @@
+{
+  "name": "sassdesk",
+  "version": "0.1.0",
+  "description": "SassDesk —— 基于 Pi Agent 的个人桌面 AI 员工（Windows CLI）",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19"
+  },
+  "main": "dist/index.js",
+  "bin": {
+    "sassdesk": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js",
+    "dev": "npm run build && node dist/index.js",
+    "startup-run": "node dist/index.js --run-startup",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "agent",
+    "pi-agent",
+    "windows",
+    "cli",
+    "typescript"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "^1.1.0",
+    "@earendil-works/pi-ai": "^1.1.0",
+    "pino": "^9.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -78,8 +78,51 @@ export class Live2DHost {
     // 每帧钩子：error 摇头 / sleeping 闭眼呼吸
     app.ticker.add(() => this.onFrame());
     console.log("[live2d] 模型加载完成:", modelUrl);
+
+    // 渲染健康检查：PIXI 基础渲染链是否真的输出像素（透明窗口/无 GPU 环境会静默失败）
+    const health = await this.checkRendering(app);
+    console.log(`[live2d] 渲染健康检查: ${health.ok ? "通过" : "失败"} - ${health.detail}`);
+    this.reportDiag(health.ok ? "Live2D 渲染正常" : `渲染异常（${health.detail}）`);
+    if (!health.ok) {
+      throw new Error(`画布无输出（${health.detail}），将回退内置角色`);
+    }
+
     // 渲染自检（诊断 WebGL/尺寸/可见性）
     setTimeout(() => console.log("[live2d] 自检:", this.debugInfo()), 1_500);
+  }
+
+  /** 渲染健康检查：画红块 → 采样像素 → 移除。返回是否可见。 */
+  private async checkRendering(app: PIXI.Application): Promise<{ ok: boolean; detail: string }> {
+    const g = new PIXI.Graphics();
+    g.beginFill(0xff0000, 0.95);
+    g.drawRect(0, 0, 40, 40);
+    g.endFill();
+    app.stage.addChild(g as never);
+    await new Promise((r) => setTimeout(r, 600));
+    try {
+      const ext = (app.renderer as unknown as { extract: { pixels(): Uint8Array } }).extract;
+      const px = ext.pixels();
+      let red = 0;
+      for (let i = 0; i < px.length; i += 4) {
+        if ((px[i] ?? 0) > 180 && (px[i + 1] ?? 255) < 100) red++;
+        if (red > 40) break;
+      }
+      return red > 40 ? { ok: true, detail: `红块采样 ${red}+ 像素` } : { ok: false, detail: "画布全透明（GPU 合成受限）" };
+    } catch (e) {
+      return { ok: false, detail: "采样异常:" + (e as Error).message };
+    } finally {
+      app.stage.removeChild(g as never);
+      g.destroy();
+    }
+  }
+
+  /** 上报诊断信息（主进程用气泡展示给用户）。 */
+  private reportDiag(msg: string): void {
+    try {
+      (window as unknown as { sassdesk?: { reportDiag?: (m: string) => void } }).sassdesk?.reportDiag?.(msg);
+    } catch {
+      // 诊断通道不可用不影响主流程
+    }
   }
 
   /** 渲染状态自检（排障用）。 */
@@ -95,6 +138,22 @@ export class Live2DHost {
       glLost = "err:" + (e as Error).message;
     }
     const bounds = this.model?.getBounds?.();
+    // 像素采样：从 PIXI 渲染目标读回，判断"画布上是否真的画了东西"（区分渲染层 vs 窗口合成层问题）
+    let pixelNonZero = "n/a";
+    try {
+      const extract = (this.app as { renderer?: { extract?: { pixels(): Uint8Array } } })?.renderer?.extract;
+      if (extract) {
+        const px = extract.pixels();
+        let nonZero = 0;
+        for (let i = 3; i < px.length; i += 4) {
+          if ((px[i] ?? 0) > 0) nonZero++;
+          if (nonZero > 200) break;
+        }
+        pixelNonZero = nonZero > 200 ? `有内容(${nonZero}+ 非透明像素)` : `近全透明(${nonZero})`;
+      }
+    } catch (e) {
+      pixelNonZero = "err:" + (e as Error).message;
+    }
     return [
       `canvas=${canvas ? canvas.width + "x" + canvas.height : "无"}`,
       `rect=${rect ? `${rect.width.toFixed(0)}x${rect.height.toFixed(0)}@${rect.left.toFixed(0)},${rect.top.toFixed(0)}` : "无"}`,
@@ -104,6 +163,7 @@ export class Live2DHost {
       `bounds=${bounds ? `${bounds.x.toFixed(0)},${bounds.y.toFixed(0)},${bounds.width.toFixed(0)}x${bounds.height.toFixed(0)}` : "无"}`,
       `stageChildren=${(this.app as { stage?: { children?: unknown[] } })?.stage?.children?.length ?? "?"}`,
       `tickerStarted=${(this.app as { ticker?: { started?: boolean } })?.ticker?.started}`,
+      `pixelSample=${pixelNonZero}`,
     ].join(" | ");
   }
 

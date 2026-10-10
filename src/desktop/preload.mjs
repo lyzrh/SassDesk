@@ -16,4 +16,6 @@ contextBridge.exposeInMainWorld("sassdesk", {
   submit: (text) => ipcRenderer.invoke("input:submit", text),
   /** 请求主进程打开对话输入窗（双击角色触发）。 */
   openInput: () => ipcRenderer.send("pet:openInput"),
+  /** 上报渲染诊断（主进程以气泡展示）。 */
+  reportDiag: (msg) => ipcRenderer.send("pet:diag", msg),
 });

@@ -121,6 +121,16 @@ if (!window.sassdesk) {
         return;
       } catch (e) {
         console.warn(`[pet] Live2D 初始化失败，回退 SVG rig：${(e as Error).message}`);
+        // 清理半初始化的 Live2D（canvas 等），确保 rig 可见
+        try {
+          live2dHost?.destroy();
+        } catch {
+          /* 忽略 */
+        }
+        live2dHost = null;
+        (document.getElementById("l2d-container") as HTMLElement).classList.add("hidden");
+        (document.getElementById("pet-img") as HTMLImageElement).style.display = "";
+        showBubble("Live2D 渲染不可用，已切换内置角色", true);
       }
     }
     applyState(currentState);

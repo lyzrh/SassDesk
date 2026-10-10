@@ -34,6 +34,7 @@ export interface SassDeskBridge {
   onCursor(cb: (data: SassDeskCursorData) => void): void;
   submit(text: string): Promise<{ ok: boolean; reply: string }>;
   openInput(): void;
+  reportDiag(msg: string): void;
 }
 
 declare global {

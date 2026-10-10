@@ -19,6 +19,14 @@ import { PetController } from "./pet-controller.js";
 const here = path.dirname(fileURLToPath(import.meta.url)); // dist/desktop
 const rendererDir = path.join(here, "renderer");
 
+// 透明窗口 + 硬件 GPU 合成在部分 Windows 驱动组合下会导致 WebGL canvas 不可见
+// （DOM 正常、模型消失）。桌宠是小窗口低负载场景，默认走软件合成保证可见性；
+// 需要 GPU 时设 SASSDESK_GPU=1。
+if (process.env.SASSDESK_GPU !== "1") {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch("enable-transparent-visuals");
+}
+
 /**
  * 角色素材目录解析：
  * app.getAppPath() 在显式 .mjs 入口下返回入口目录（dist/desktop）而非项目根，
@@ -273,6 +281,13 @@ app.whenReady().then(() => {
 
   ipcMain.handle("input:submit", (_e, text: string) => handleSubmit(text));
   ipcMain.on("pet:openInput", () => createInputWindow());
+  ipcMain.on("pet:diag", (_e, msg: string) => {
+    console.log(`[SassDesk] 渲染诊断：${msg}`);
+    // 回退等情况用气泡直接告知用户（渲染正常时不打扰）
+    if (msg.includes("异常") || msg.includes("失败") || msg.includes("回退")) {
+      setTimeout(() => pushBubble(msg.slice(0, 60), false), 500);
+    }
+  });
 
   // 启动指引：前 3 秒置顶吸引注意 + 气泡告知交互方式
   petWin?.setAlwaysOnTop(true);

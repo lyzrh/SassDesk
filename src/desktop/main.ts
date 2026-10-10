@@ -134,9 +134,15 @@ function createPetWindow(): void {
     petWin.show();
     return;
   }
+  const { workArea } = screen.getPrimaryDisplay();
+  const W = 240;
+  const H = 280;
   petWin = new BrowserWindow({
-    width: 240,
-    height: 280,
+    width: W,
+    height: H,
+    // 固定到工作区右下角（留边距），确保启动即可见
+    x: Math.round(workArea.x + workArea.width - W - 24),
+    y: Math.round(workArea.y + workArea.height - H - 24),
     transparent: true,
     frame: false,
     resizable: false,
@@ -166,6 +172,23 @@ function createPetWindow(): void {
       live2dModelUrl,
     });
     pushState(pet.state);
+    // 开发调试：SASSDESK_SHOT=<png路径> 时，等待渲染稳定后截取窗口画面并退出（用于验证视觉呈现）
+    const shotPath = process.env.SASSDESK_SHOT;
+    if (shotPath) {
+      setTimeout(() => {
+        void petWin?.webContents
+          .capturePage()
+          .then((img) => {
+            fs.writeFileSync(shotPath, img.toPNG());
+            console.log(`[shot] 窗口截图已保存：${shotPath}`);
+            app.quit();
+          })
+          .catch((e: Error) => {
+            console.error(`[shot] 截图失败：${e.message}`);
+            app.quit();
+          });
+      }, 7_000);
+    }
   });
 }
 
@@ -249,6 +272,12 @@ app.whenReady().then(() => {
   startCursorPolling();
 
   ipcMain.handle("input:submit", (_e, text: string) => handleSubmit(text));
+  ipcMain.on("pet:openInput", () => createInputWindow());
+
+  // 启动指引：前 3 秒置顶吸引注意 + 气泡告知交互方式
+  petWin?.setAlwaysOnTop(true);
+  setTimeout(() => petWin?.setAlwaysOnTop(false), 3_000);
+  setTimeout(() => pushBubble("你好！双击我可以派活；右键托盘也能找我～", true), 3_200);
 
   console.log("[SassDesk] 桌宠已启动（托盘可对话/隐藏/退出）。配置目录：" + ctx.configDir);
 });

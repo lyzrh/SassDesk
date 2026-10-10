@@ -63,18 +63,48 @@ export class Live2DHost {
     this.model = await Live2DModel.from(modelUrl, { autoInteract: false });
     app.stage.addChild(this.model as never);
 
-    // 布局：把模型自然尺寸缩放适配 240×280
-    const mw = (this.model.width as number) || 240;
-    const mh = (this.model.height as number) || 280;
-    const scale = Math.min(240 / mw, 280 / mh) * 1.18;
+    // 布局：把模型自然尺寸缩放适配 240×280 并居中
+    // 注意：Live2DModel(Cubism2) 继承 PIXI.Container，没有 anchor —— 必须用"中心减半尺寸"定位
+    const mw = (this.model.width as number) || 0;
+    const mh = (this.model.height as number) || 0;
+    this.natW = mw;
+    this.natH = mh;
+    console.log(`[live2d] 模型自然尺寸: ${mw}×${mh}`);
+    const scale = mw > 0 && mh > 0 ? Math.min(240 / mw, 280 / mh) * 1.05 : 1;
     this.baseScale = scale;
-    (this.model as { scale: { set(x: number, y: number): void } }).scale.set(scale, scale);
-    (this.model as { anchor: { set(x: number, y: number): void } }).anchor?.set?.(0.5, 0.35);
-    (this.model as { position: { set(x: number, y: number): void } }).position.set(120, 150);
+    this.applyLayout(scale);
+    console.log(`[live2d] 布局: scale=${scale.toFixed(4)}`);
 
     // 每帧钩子：error 摇头 / sleeping 闭眼呼吸
     app.ticker.add(() => this.onFrame());
     console.log("[live2d] 模型加载完成:", modelUrl);
+    // 渲染自检（诊断 WebGL/尺寸/可见性）
+    setTimeout(() => console.log("[live2d] 自检:", this.debugInfo()), 1_500);
+  }
+
+  /** 渲染状态自检（排障用）。 */
+  debugInfo(): string {
+    const canvas = this.canvas;
+    const rect = canvas?.getBoundingClientRect();
+    const rendererType = (this.app as { renderer?: { type?: number; width?: number; height?: number } })?.renderer;
+    let glLost = "n/a";
+    try {
+      const gl = canvas?.getContext("webgl") as WebGLRenderingContext | null;
+      glLost = gl ? String(gl.isContextLost()) : "no-context";
+    } catch (e) {
+      glLost = "err:" + (e as Error).message;
+    }
+    const bounds = this.model?.getBounds?.();
+    return [
+      `canvas=${canvas ? canvas.width + "x" + canvas.height : "无"}`,
+      `rect=${rect ? `${rect.width.toFixed(0)}x${rect.height.toFixed(0)}@${rect.left.toFixed(0)},${rect.top.toFixed(0)}` : "无"}`,
+      `rendererType=${rendererType?.type ?? "?"}(1=WebGL,2=Canvas) ${rendererType?.width}x${rendererType?.height}`,
+      `glContextLost=${glLost}`,
+      `modelVisible=${this.model?.visible} alpha=${this.model?.alpha}`,
+      `bounds=${bounds ? `${bounds.x.toFixed(0)},${bounds.y.toFixed(0)},${bounds.width.toFixed(0)}x${bounds.height.toFixed(0)}` : "无"}`,
+      `stageChildren=${(this.app as { stage?: { children?: unknown[] } })?.stage?.children?.length ?? "?"}`,
+      `tickerStarted=${(this.app as { ticker?: { started?: boolean } })?.ticker?.started}`,
+    ].join(" | ");
   }
 
   /** 状态切换：动作组播放 + 参数编排。 */
@@ -109,6 +139,18 @@ export class Live2DHost {
     void this.model.motion("click", 0, 3);
   }
 
+  /** 按缩放设置模型尺寸（保持居中）。 */
+  private applyLayout(s: number): void {
+    if (!this.model) return;
+    const mw = (this.natW ?? 0) * s;
+    const mh = (this.natH ?? 0) * s;
+    (this.model as { scale: { set(x: number, y: number): void } }).scale.set(s, s);
+    (this.model as { position: { set(x: number, y: number): void } }).position.set((240 - mw) / 2, (280 - mh) / 2);
+  }
+
+  private natW = 0;
+  private natH = 0;
+
   /** 每帧：error 摇头 / sleeping 闭眼呼吸 / 尺寸兜底。 */
   private onFrame(): void {
     if (!this.model) return;
@@ -126,7 +168,7 @@ export class Live2DHost {
       case "error": {
         // 摇头 + 缩
         core.setParamFloat("PARAM_ANGLE_Z", Math.sin(this.wobbleT * 3.2) * 8);
-        (this.model as { scale: { set(x: number, y: number): void } }).scale.set(this.baseScale * 0.97, this.baseScale * 0.94);
+        this.applyLayout(this.baseScale * 0.96);
         break;
       }
       case "listening": {
@@ -135,7 +177,7 @@ export class Live2DHost {
         break;
       }
       default:
-        (this.model as { scale: { set(x: number, y: number): void } }).scale.set(this.baseScale, this.baseScale);
+        this.applyLayout(this.baseScale);
         break;
     }
   }

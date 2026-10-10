@@ -136,8 +136,12 @@ if (!window.sassdesk) {
   window.sassdesk.onCursor(({ x, y, inside }) => {
     if (usingLive2D && live2dHost) live2dHost.lookAt(x, y, inside);
   });
-  // 点击角色 → Live2D click 动作（m05）
-  (document.getElementById("pet") as HTMLElement).addEventListener("click", () => {
+  // 点击角色 → Live2D click 动作（m05）；双击 → 打开对话输入窗
+  const petEl = document.getElementById("pet") as HTMLElement;
+  petEl.addEventListener("click", () => {
     if (usingLive2D && live2dHost) live2dHost.tap();
+  });
+  petEl.addEventListener("dblclick", () => {
+    window.sassdesk.openInput();
   });  window.sassdesk.onBubble(({ text, accent }) => showBubble(text, accent));
 }

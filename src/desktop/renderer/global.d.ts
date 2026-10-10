@@ -33,6 +33,7 @@ export interface SassDeskBridge {
   onBubble(cb: (data: SassDeskBubbleData) => void): void;
   onCursor(cb: (data: SassDeskCursorData) => void): void;
   submit(text: string): Promise<{ ok: boolean; reply: string }>;
+  openInput(): void;
 }
 
 declare global {

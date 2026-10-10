@@ -155,14 +155,14 @@ describe("desktop/pet-controller 事件适配", () => {
     };
   }
 
-  it("runWithAgent 驱动 thinking → working → success 全链路", async () => {
+  it("runWithAgent 驱动 listening → thinking → working → success 全链路", async () => {
     const c = new PetController({ holdMs: 100 });
     const changes: PetStateChange[] = [];
     c.subscribe((x) => changes.push(x));
     const agent = fakeAgent({ text: "done" }) as never;
     await c.runWithAgent(agent, "你好");
     expect(c.state).toBe("success");
-    expect(changes.map((x) => x.to)).toEqual(["thinking", "working", "success"]);
+    expect(changes.map((x) => x.to)).toEqual(["listening", "thinking", "working", "success"]);
     c.dispose();
   });
 

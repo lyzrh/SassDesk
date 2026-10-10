@@ -12,7 +12,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage } from "electron";
+import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } from "electron";
 import { bootstrapApp, type AppContext } from "../app/bootstrap.js";
 import { PetController } from "./pet-controller.js";
 
@@ -56,6 +56,53 @@ let petWin: BrowserWindow | null = null;
 let inputWin: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let agent: Awaited<ReturnType<AppContext["ensureAgent"]>> | null = null;
+/** Live2D 模型配置（探测到 assets/models 下的 model*.json 时启用）。 */
+let live2dModelUrl: string | undefined;
+
+/** 探测 Live2D 模型（assets/models/<name>/model*.json，第一个命中者）。 */
+function resolveLive2dModel(): string | undefined {
+  const modelsRoot = path.join(root(), "assets", "models");
+  try {
+    for (const name of fs.readdirSync(modelsRoot)) {
+      const dir = path.join(modelsRoot, name);
+      if (!fs.statSync(dir).isDirectory()) continue;
+      const entry = fs.readdirSync(dir).find((f) => f.endsWith(".model3.json") || f === "model.sassdesk.json" || f === "model.json");
+      if (entry) {
+        const url = pathToFileURL(path.join(dir, entry)).href;
+        console.log(`[SassDesk] Live2D 模型：${url}`);
+        return url;
+      }
+    }
+  } catch {
+    // 无模型目录：使用内置 SVG rig
+  }
+  return undefined;
+}
+
+/** 全局鼠标跟随轮询（30Hz）：Live2D 模型需要看向窗口外的鼠标。 */
+function startCursorPolling(): void {
+  const timer = setInterval(() => {
+    if (!petWin || petWin.isDestroyed()) return;
+    try {
+      const p = screen.getCursorScreenPoint();
+      const b = petWin.getBounds();
+      const nx = clamp((p.x - b.x) / b.width, -1, 1) * 2 - 1; // -1..1，窗口中心为 0
+      const ny = clamp((p.y - b.y) / b.height, -1, 1) * 2 - 1;
+      petWin.webContents.send("pet:cursor", { x: nx, y: ny, inside: p.x >= b.x && p.x <= b.x + b.width && p.y >= b.y && p.y <= b.y + b.height });
+    } catch {
+      // 屏幕信息不可用时静默跳过
+    }
+  }, 33);
+  app.on("before-quit", () => clearInterval(timer));
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, v));
+}
+
+function root(): string {
+  return path.resolve(here, "..", "..");
+}
 
 function loadManifest(): PetManifest {
   try {
@@ -116,6 +163,7 @@ function createPetWindow(): void {
     petWin?.webContents.send("pet:config", {
       manifest,
       assetsDirUrl,
+      live2dModelUrl,
     });
     pushState(pet.state);
   });
@@ -190,6 +238,7 @@ async function handleSubmit(text: string): Promise<{ ok: boolean; reply: string 
 app.whenReady().then(() => {
   ctx = bootstrapApp();
   manifest = loadManifest();
+  live2dModelUrl = resolveLive2dModel();
 
   pet = new PetController();
   pet.subscribe(({ from, to, reason }) => {
@@ -197,6 +246,7 @@ app.whenReady().then(() => {
   });
   createPetWindow();
   createTray();
+  startCursorPolling();
 
   ipcMain.handle("input:submit", (_e, text: string) => handleSubmit(text));
 

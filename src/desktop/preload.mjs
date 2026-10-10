@@ -4,12 +4,14 @@ import { contextBridge, ipcRenderer } from "electron";
 
 console.log("[preload] executing, sandbox context ok");
 contextBridge.exposeInMainWorld("sassdesk", {
-  /** 主进程推送角色配置（manifest + 素材目录 file URL）。 */
+  /** 主进程推送角色配置（manifest + 素材目录 file URL + 可选 Live2D 模型）。 */
   onConfig: (cb) => ipcRenderer.on("pet:config", (_e, data) => cb(data)),
   /** 主进程推送状态变化。 */
   onState: (cb) => ipcRenderer.on("pet:state", (_e, data) => cb(data)),
   /** 主进程推送气泡文本（状态说明 / Agent 回复摘要）。 */
   onBubble: (cb) => ipcRenderer.on("pet:bubble", (_e, data) => cb(data)),
+  /** 主进程推送全局鼠标位置（相对桌宠窗口中心，-1..1）。 */
+  onCursor: (cb) => ipcRenderer.on("pet:cursor", (_e, data) => cb(data)),
   /** 对话输入窗提交文本（仅输入窗使用）。 */
   submit: (text) => ipcRenderer.invoke("input:submit", text),
 });

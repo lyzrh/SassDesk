@@ -71,10 +71,12 @@ npm run build
 npm run desktop     # 或双击 start-desktop.cmd
 ```
 
-- 透明无边框小窗（240×280），Sass 常驻桌面右下角托盘；可拖动、可隐藏
+- 透明无边框小窗（240×280），角色常驻桌面（托盘：对话/显示/隐藏/退出）；可拖动、可隐藏
 - 托盘「对话…」弹输入小窗 → 真实 Agent 执行 → 结果以气泡展示
 - 状态机由**真实事件驱动**（用户输入 / Agent 生命周期 / 结构化成败判定），不靠关键词匹配
-- 素材体系：`assets/characters/sass/manifest.json`（状态→素材/动画/回退）；7 状态 AI 生成透明 PNG + 缺图三级回退（正式图 → 占位 SVG → 内置兜底），详见 `docs/character-assets.md`
+- **双角色引擎**：
+  - **Live2D 引擎**（默认，检测到 `assets/models/` 下的 Cubism 2 模型时自动启用）：pixi.js + pixi-live2d-display + Cubism 2 core，状态→动作映射（等待/思考/工作/完成/点击），全局鼠标视线跟随，支持点击动作；模型目录已 gitignore（本地使用，来源：model.hacxy.cn/hallo）
+  - **内置 SVG rig**（无模型时的回退）：部件化肢体动画（眨眼/尾巴波浪/打字/弹跳），素材见 `assets/characters/sass/`
 - 隐私与安全：不设开机自启、不开麦克风监听、不截屏；`contextIsolation` 开启、渲染进程无 Node 能力
 
 ## CLI 内置命令

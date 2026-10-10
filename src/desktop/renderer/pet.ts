@@ -101,11 +101,43 @@ if (!window.sassdesk) {
   setLoadPhase("error");
   (errorEl.querySelector(".tip") as HTMLElement).textContent = "preload 未加载，请重启桌宠";
 } else {
-  window.sassdesk.onConfig((data) => {
+  let live2dHost: import("./live2d-host.js").Live2DHost | null = null;
+  let usingLive2D = false;
+
+  window.sassdesk.onConfig(async (data) => {
     config = data;
     console.log(`[pet] config 就绪：${Object.keys(data.manifest.states).length} 个状态，素材目录 ${data.assetsDirUrl}`);
+    // Live2D 优先：主进程探测到模型时启用 PIXI 引擎（打包 bundle；失败则回退 SVG rig）
+    if (data.live2dModelUrl && !usingLive2D) {
+      try {
+        const mod = (await import("./l2d-bundle.js")) as { Live2DHost: new (c: HTMLElement) => import("./live2d-host.js").Live2DHost };
+        live2dHost = new mod.Live2DHost(document.getElementById("l2d-container") as HTMLElement);
+        await live2dHost.init(data.live2dModelUrl);
+        usingLive2D = true;
+        (document.getElementById("l2d-container") as HTMLElement).classList.remove("hidden");
+        (document.getElementById("pet-img") as HTMLImageElement).style.display = "none";
+        loadingEl.classList.add("hidden");
+        console.log("[pet] Live2D 引擎已启用");
+        return;
+      } catch (e) {
+        console.warn(`[pet] Live2D 初始化失败，回退 SVG rig：${(e as Error).message}`);
+      }
+    }
     applyState(currentState);
   });
-  window.sassdesk.onState(({ state, reason }) => applyState(state, reason));
-  window.sassdesk.onBubble(({ text, accent }) => showBubble(text, accent));
+  window.sassdesk.onState(({ state, reason }) => {
+    if (usingLive2D && live2dHost) {
+      live2dHost.setState({ state, reason });
+      if (state === "error" && reason) showBubble(`遇到问题了…${reason}`.slice(0, 90), false);
+      return;
+    }
+    applyState(state, reason);
+  });
+  window.sassdesk.onCursor(({ x, y, inside }) => {
+    if (usingLive2D && live2dHost) live2dHost.lookAt(x, y, inside);
+  });
+  // 点击角色 → Live2D click 动作（m05）
+  (document.getElementById("pet") as HTMLElement).addEventListener("click", () => {
+    if (usingLive2D && live2dHost) live2dHost.tap();
+  });  window.sassdesk.onBubble(({ text, accent }) => showBubble(text, accent));
 }

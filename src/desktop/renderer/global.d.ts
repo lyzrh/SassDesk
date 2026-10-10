@@ -17,12 +17,21 @@ export interface SassDeskPetConfig {
     states: Record<string, { src: string; poster?: string; animation: string; label: string }>;
   };
   assetsDirUrl: string;
+  /** Live2D 模型入口 URL（探测到 assets/models 下模型时提供）。 */
+  live2dModelUrl?: string;
+}
+
+export interface SassDeskCursorData {
+  x: number; // -1..1（窗口中心为 0）
+  y: number;
+  inside: boolean;
 }
 
 export interface SassDeskBridge {
   onConfig(cb: (data: SassDeskPetConfig) => void): void;
   onState(cb: (data: SassDeskStateData) => void): void;
   onBubble(cb: (data: SassDeskBubbleData) => void): void;
+  onCursor(cb: (data: SassDeskCursorData) => void): void;
   submit(text: string): Promise<{ ok: boolean; reply: string }>;
 }
 

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file: 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
     html, body { width: 240px; height: 280px; background: transparent; overflow: hidden; }
@@ -26,6 +26,10 @@
       opacity: 0; transition: opacity .38s ease;
     }
     #pet img[data-load="loaded"] { opacity: 1; }
+    /* Live2D 画布容器 */
+    #l2d-container { position: absolute; inset: 0; }
+    #l2d-container.hidden { display: none; }
+    #l2d-container canvas { -webkit-app-region: no-drag; }
     /* 加载占位动画：狐狸剪影呼吸脉动（素材加载完成前显示） */
     #loading {
       position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -70,10 +74,12 @@
 <body>
   <div id="bubble"></div>
   <div id="pet">
+    <div id="l2d-container" class="hidden"></div>
     <div id="loading"><div class="silhouette"></div></div>
     <div id="load-error" class="hidden"><div class="face">🦊💤</div><div class="tip">素材睡着了，检查 assets 目录后重启</div></div>
     <img id="pet-img" alt="Sass" draggable="false" /><span id="badge"></span>
   </div>
+  <script src="./vendor/live2d.min.js"></script>
   <script type="module" src="./pet.js"></script>
 </body>
 </html>

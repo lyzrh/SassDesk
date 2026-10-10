@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
+  <!-- Sass placeholder (占位素材): SLEEPING 休息 -->
+  curl
+  <ellipse cx="120" cy="196" rx="62" ry="26" fill="#2B3440"/><ellipse cx="120" cy="192" rx="48" ry="18" fill="#3A4756"/><ellipse cx="76" cy="206" rx="14" ry="8" fill="#8DA3B8"/><ellipse cx="164" cy="206" rx="14" ry="8" fill="#8DA3B8"/>
+  <g transform="">
+    <g transform=" ">
+      <path d="M60 74 L70 26 L96 60 Z" fill="#5B7A99"/>
+      <path d="M66 66 L72 38 L88 58 Z" fill="#C7D3DE"/>
+    </g><g transform="translate(240,0) scale(-1,1) ">
+      <path d="M60 74 L70 26 L96 60 Z" fill="#5B7A99"/>
+      <path d="M66 66 L72 38 L88 58 Z" fill="#C7D3DE"/>
+    </g>
+    <circle cx="120" cy="100" r="46" fill="#8DA3B8"/>
+    <path d="M120 132 Q86 128 80 104 Q96 130 120 130 Q144 130 160 104 Q154 128 120 132 Z" fill="#FFFFFF"/>
+    <path d="M120 128 Q104 142 120 148 Q136 142 120 128 Z" fill="#FFFFFF"/>
+    <path d="M90 96 L106 96" stroke="#22303C" stroke-width="5" stroke-linecap="round"/><path d="M134 96 L150 96" stroke="#22303C" stroke-width="5" stroke-linecap="round"/>
+    <path d="M116 120 L124 120" stroke="#22303C" stroke-width="4" stroke-linecap="round"/>
+    <path d="M116 110 L124 110 L120 115 Z" fill="#22303C"/>
+    
+    <path d="M74 104 Q70 100 74 96" stroke="#2B3440" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <path d="M166 104 Q170 100 166 96" stroke="#2B3440" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <path d="M74 100 Q120 58 166 100" stroke="#2B3440" stroke-width="8" fill="none" stroke-linecap="round"/>
+    <circle cx="120" cy="66" r="5" fill="#59C2FF"><animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/></circle>
+    
+  </g>
+  
+</svg>

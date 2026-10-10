@@ -1,0 +1,92 @@
+{
+  "$schema": "./manifest.schema.json",
+  "id": "sass",
+  "name": "Sass（萨斯）",
+  "version": "0.1.0",
+  "species": "灰蓝色小狐狸",
+  "description": "好奇、喜欢钻研、偶尔有点小傲娇的桌面 AI 员工。灰蓝色毛发，白色脸颊/胸口/尾巴尖，深色连帽衫，科技蓝灯光耳机。",
+  "visualSpec": {
+    "fur": "灰蓝色（主）+ 白色（脸颊、胸口、尾巴尖）",
+    "outfit": "深色连帽衫 + 科技蓝灯光耳机",
+    "style": "Q 版 / 轻微二次元 / 治愈，非写实动物风",
+    "palette": ["#8DA3B8", "#5B7A99", "#FFFFFF", "#2B3440", "#59C2FF"]
+  },
+  "window": {
+    "width": 240,
+    "height": 280,
+    "scale": 1.0,
+    "alwaysOnTop": false
+  },
+  "bubble": {
+    "style": "dark",
+    "maxChars": 90,
+    "durationMs": 6000,
+    "colors": { "bg": "#222B36CC", "text": "#E8EEF5", "accent": "#59C2FF" }
+  },
+  "fallback": "placeholder.svg",
+  "states": {
+    "idle": {
+      "label": "待机",
+      "src": "idle/idle.png",
+      "frames": 1,
+      "frameSize": { "width": 240, "height": 240 },
+      "fps": 2,
+      "animation": "breathe",
+      "hints": "自然待机、眨眼、轻微摇尾巴"
+    },
+    "listening": {
+      "label": "聆听",
+      "src": "listening/listening.png",
+      "frames": 1,
+      "frameSize": { "width": 240, "height": 240 },
+      "fps": 4,
+      "animation": "bounce",
+      "hints": "竖起耳朵、专注聆听"
+    },
+    "thinking": {
+      "label": "思考",
+      "src": "thinking/thinking.png",
+      "frames": 1,
+      "frameSize": { "width": 240, "height": 240 },
+      "fps": 2,
+      "animation": "tilt",
+      "hints": "歪头思考、轻微疑问动作"
+    },
+    "working": {
+      "label": "工作",
+      "src": "working/working.png",
+      "frames": 1,
+      "frameSize": { "width": 240, "height": 240 },
+      "fps": 6,
+      "animation": "breathe",
+      "hints": "坐在电脑前认真工作"
+    },
+    "success": {
+      "label": "成功",
+      "src": "success/success.png",
+      "frames": 1,
+      "frameSize": { "width": 240, "height": 240 },
+      "fps": 4,
+      "animation": "bounce",
+      "hints": "开心、尾巴翘起"
+    },
+    "error": {
+      "label": "出错",
+      "src": "error/error.png",
+      "frames": 1,
+      "frameSize": { "width": 240, "height": 240 },
+      "fps": 2,
+      "animation": "shake",
+      "hints": "困惑、沮丧（不是恐怖/崩坏表情）"
+    },
+    "sleeping": {
+      "label": "休息",
+      "src": "sleeping/sleeping.png",
+      "frames": 1,
+      "frameSize": { "width": 240, "height": 240 },
+      "fps": 1,
+      "animation": "breathe-slow",
+      "hints": "趴着休息、轻微呼吸"
+    }
+  }
+}

@@ -2,6 +2,7 @@
 // 此文件被构建脚本原样复制到 dist/desktop/preload.mjs（Electron ESM preload 要求 .mjs 扩展名）。
 import { contextBridge, ipcRenderer } from "electron";
 
+console.log("[preload] executing, sandbox context ok");
 contextBridge.exposeInMainWorld("sassdesk", {
   /** 主进程推送角色配置（manifest + 素材目录 file URL）。 */
   onConfig: (cb) => ipcRenderer.on("pet:config", (_e, data) => cb(data)),

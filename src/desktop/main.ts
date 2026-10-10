@@ -11,17 +11,38 @@
  */
 import path from "node:path";
 import fs from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage } from "electron";
 import { bootstrapApp, type AppContext } from "../app/bootstrap.js";
 import { PetController } from "./pet-controller.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url)); // dist/desktop
 const rendererDir = path.join(here, "renderer");
-const charAssetsDir = path.join(app.getAppPath(), "assets", "characters", "sass");
-const assetsDirUrl = charAssetsDir.endsWith("\\") || charAssetsDir.endsWith("/")
-  ? new URL(`file:///${charAssetsDir}`).href
-  : new URL(`file:///${charAssetsDir}/`).href;
+
+/**
+ * 角色素材目录解析：
+ * app.getAppPath() 在显式 .mjs 入口下返回入口目录（dist/desktop）而非项目根，
+ * 会导致素材 404。因此显式探测多个候选位置，以 manifest.json 真实存在为准。
+ */
+function resolveCharAssetsDir(): string {
+  const candidates = [
+    path.resolve(here, "..", "..", "assets", "characters", "sass"), // <root>/assets（标准构建布局）
+    path.resolve(here, "..", "assets", "characters", "sass"),        // dist/assets（复制布局）
+    path.join(app.getAppPath(), "assets", "characters", "sass"),    // appPath 兜底
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(path.join(c, "manifest.json"))) {
+      console.log(`[SassDesk] 素材目录：${c}`);
+      return c;
+    }
+  }
+  console.warn(`[SassDesk] 未找到角色素材目录，尝试过：\n  ${candidates.join("\n  ")}`);
+  return candidates[0]!;
+}
+
+const charAssetsDir = resolveCharAssetsDir();
+// pathToFileURL 正确处理盘符/反斜杠/空格/中文等特殊字符，手工拼接 file:/// 在 Windows 下不可靠
+const assetsDirUrl = pathToFileURL(charAssetsDir.endsWith(path.sep) ? charAssetsDir : charAssetsDir + path.sep).href;
 
 interface PetManifest {
   fallback: string;
@@ -83,6 +104,13 @@ function createPetWindow(): void {
     },
   });
   petWin.setMenuBarVisibility(false);
+  // 诊断：转发渲染层 console 与页面加载失败（图片 404 / CSP 拦截 / preload 异常都会在这里现形）
+  petWin.webContents.on("console-message", (_e, _level, message, line, sourceId) => {
+    console.log(`[renderer] ${message} (${path.basename(sourceId)}:${line})`);
+  });
+  petWin.webContents.on("did-fail-load", (_e, code, desc, url) => {
+    console.error(`[did-fail-load] ${code} ${desc} ${url}`);
+  });
   void petWin.loadFile(path.join(rendererDir, "index.html"));
   petWin.webContents.on("did-finish-load", () => {
     petWin?.webContents.send("pet:config", {

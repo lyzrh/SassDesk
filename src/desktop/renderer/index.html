@@ -23,7 +23,31 @@
     #pet img {
       position: absolute; inset: 0; width: 240px; height: 240px;
       object-fit: contain; -webkit-user-drag: none; transform-origin: 50% 90%;
+      opacity: 0; transition: opacity .38s ease;
     }
+    #pet img[data-load="loaded"] { opacity: 1; }
+    /* 加载占位动画：狐狸剪影呼吸脉动（素材加载完成前显示） */
+    #loading {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    #loading.hidden, #load-error.hidden { display: none; }
+    #loading .silhouette {
+      width: 150px; height: 150px; border-radius: 50% 50% 46% 46%;
+      background: linear-gradient(120deg, #5b7a9922, #8da3b855, #5b7a9922);
+      background-size: 220% 220%;
+      animation: shimmer 1.6s ease-in-out infinite, breathe 3.2s ease-in-out infinite;
+    }
+    @keyframes shimmer { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+    @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+    /* 加载失败状态：友好提示（全部素材源都失败时才出现） */
+    #load-error {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 8px; pointer-events: none;
+      color: #9fb3c8; font: 12px/1.5 "Microsoft YaHei", sans-serif;
+    }
+    #load-error .face { font-size: 44px; filter: grayscale(0.3); animation: breathe 3.2s ease-in-out infinite; }
+    #load-error .tip { background: #222b36cc; border-radius: 10px; padding: 3px 10px; }
     /* 程序化动画（单帧素材 + CSS 变换） */
     img[data-anim="breathe"] { animation: breathe 3.2s ease-in-out infinite; }
     img[data-anim="breathe-slow"] { animation: breathe 5.5s ease-in-out infinite; }
@@ -34,6 +58,7 @@
     @keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
     @keyframes tilt { 0%,100% { transform: rotate(0deg); } 30% { transform: rotate(-5deg); } 70% { transform: rotate(4deg); } }
     @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+    img[data-anim="shake"] { animation: shake .9s ease-in-out 3; }
     /* 状态角标 */
     #badge {
       position: absolute; right: 6px; top: 6px; font: 10px/1.4 "Microsoft YaHei", sans-serif;
@@ -44,7 +69,11 @@
 </head>
 <body>
   <div id="bubble"></div>
-  <div id="pet"><img id="pet-img" alt="Sass" draggable="false" /><span id="badge"></span></div>
+  <div id="pet">
+    <div id="loading"><div class="silhouette"></div></div>
+    <div id="load-error" class="hidden"><div class="face">🦊💤</div><div class="tip">素材睡着了，检查 assets 目录后重启</div></div>
+    <img id="pet-img" alt="Sass" draggable="false" /><span id="badge"></span>
+  </div>
   <script type="module" src="./pet.js"></script>
 </body>
 </html>

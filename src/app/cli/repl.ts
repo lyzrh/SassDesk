@@ -1,0 +1,227 @@
+import readline from "node:readline";
+import fs from "node:fs";
+import path from "node:path";
+import { createEventBridge } from "../../agent/core/events.js";
+import type { ApprovalHandler, ApprovalRequest } from "../../agent/core/approval.js";
+import { SassDeskError, isSassDeskError } from "../../shared/errors.js";
+import { isSassDeskError as isSde } from "../../shared/errors.js";
+import type { AppContext } from "../bootstrap.js";
+import { transcribeWithWhisper } from "../voice/providers/whisper.js";
+import { VoiceError } from "../voice/types.js";
+
+/**
+ * SassDesk CLI（v0.1.0）：
+ * - 中文多轮文本 REPL（readline，零额外依赖）
+ * - 斜杠命令：/help /rules /startup /voice /voice-file /prefs /quit
+ * - 交互式授权确认（confirm / startup-auth 工具的 y/n 闸门）
+ * - Ctrl+C：任务运行中取消任务，空闲时退出
+ */
+
+/** 交互式授权确认器。 */
+class InteractiveApprovalHandler implements ApprovalHandler {
+  constructor(private readonly rl: readline.Interface) {}
+
+  async requestApproval(req: ApprovalRequest): Promise<boolean> {
+    const answer = await ask(this.rl, `\n⚠ 需要你的确认 ──────────────────────\n${req.summary}\n允许执行吗？(y=同意 / 其他=拒绝) > `);
+    const approved = answer.trim().toLowerCase() === "y";
+    console.log(approved ? "✓ 已同意\n" : "✗ 已拒绝\n");
+    return approved;
+  }
+}
+
+function ask(rl: readline.Interface, question: string): Promise<string> {
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => resolve(answer));
+  });
+}
+
+const HELP_TEXT = [
+  "SassDesk v0.1.0 —— 你的桌面 AI 员工",
+  "",
+  "用法：直接输入中文任务（如「现在打开 QQ 音乐」「以后每次开机自动打开 QQ 音乐」）。",
+  "",
+  "命令：",
+  "  /help              显示帮助",
+  "  /rules             查看自动化规则",
+  "  /startup           查看开机启动状态",
+  "  /voice             按键录音并语音识别（需 voice.provider=sapi，音频不出本机）",
+  "  /voice-file <路径>  用 Whisper 兼容服务转写音频文件（音频会上传到配置的服务）",
+  "  /prefs             查看音乐偏好",
+  "  /quit              退出（Ctrl+C 同效）",
+].join("\n");
+
+export async function startRepl(ctx: AppContext): Promise<void> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: `${ctx.config.character.name}> `,
+  });
+
+  const approval = new InteractiveApprovalHandler(rl);
+  console.log(HELP_TEXT);
+  console.log(`\n数据目录：${ctx.dataDir}\n配置目录：${ctx.configDir}\n`);
+  rl.prompt();
+
+  let interrupted = false;
+  rl.on("SIGINT", () => {
+    if (currentAgent && currentAgent.isBusy) {
+      console.log("\n(已请求取消当前任务…)");
+      currentAgent.abort();
+      return;
+    }
+    if (interrupted) {
+      console.log("\n再见！");
+      rl.close();
+      process.exit(0);
+    }
+    interrupted = true;
+    console.log("\n再按一次 Ctrl+C 退出。");
+    setTimeout(() => (interrupted = false), 3000);
+    rl.prompt();
+  });
+
+  let currentAgent: import("../../agent/core/sassdesk-agent.js").SassDeskAgent | null = null;
+
+  rl.on("line", (line) => {
+    void handleLine(line.trim()).catch((e) => {
+      console.error(`出错了：${e instanceof Error ? e.message : String(e)}`);
+      rl.prompt();
+    });
+  });
+
+  async function handleLine(input: string): Promise<void> {
+    if (input === "") {
+      rl.prompt();
+      return;
+    }
+    if (input.startsWith("/")) {
+      await handleCommand(input);
+      rl.prompt();
+      return;
+    }
+
+    // 普通输入 → Agent
+    const agent = await ctx.ensureAgent(approval);
+    currentAgent = agent;
+    const running = agent;
+    agent.subscribe(
+      createEventBridge({
+        onTextDelta: (d) => process.stdout.write(d),
+        onToolStart: ({ toolName }) => process.stdout.write(`\n⚙ 执行工具 ${toolName} …\n`),
+        onToolEnd: ({ toolName, durationMs, isError }) =>
+          process.stdout.write(`${isError ? "✗" : "✓"} ${toolName} 完成${durationMs !== undefined ? `（${durationMs}ms）` : ""}\n`),
+      }),
+    );
+    try {
+      const result = await running.run(input);
+      if (result.text !== "") {
+        process.stdout.write("\n");
+      }
+      if (result.truncated) {
+        console.log("（提示：本任务达到最大工具调用轮数上限，已停止。可拆成更小的任务或调大 llm.maxIterations。）");
+      }
+      if (result.errorMessage) {
+        console.log(`（模型错误：${result.errorMessage}）`);
+      }
+      const used = result.toolCalls.length;
+      ctx.logger.info({ iterations: result.iterations, toolCalls: used }, "任务完成");
+    } catch (e) {
+      if (isSassDeskError(e)) console.log(`任务失败：${e.toUserMessage()}`);
+      else console.log(`任务失败：${(e as Error).message}`);
+    } finally {
+      currentAgent = null;
+      rl.prompt();
+    }
+  }
+
+  async function handleCommand(input: string): Promise<void> {
+    const [cmd, ...rest] = input.split(/\s+/);
+    switch (cmd) {
+      case "/help":
+        console.log(HELP_TEXT);
+        return;
+      case "/rules": {
+        const rules = ctx.rules.list();
+        if (rules.length === 0) console.log("当前没有自动化规则。");
+        else {
+          for (const r of rules) {
+            console.log(`• ${r.name} [${r.trigger === "startup" ? "开机" : "手动"}] ${r.enabled ? "已启用" : "已停用"}（${r.actions.map((a) => a.type + ":" + ("appId" in a ? a.appId : "")).join(", ")}）`);
+          }
+        }
+        return;
+      }
+      case "/startup": {
+        const status = await ctx.startup.getStatus("SassDeskStartup");
+        console.log(status ? `开机启动：已注册 → ${status.command}` : "开机启动：未注册");
+        return;
+      }
+      case "/prefs": {
+        const p = ctx.prefs.load();
+        console.log(`喜欢的歌曲：${p.favoriteSongs.map((s) => (s.artist ? `${s.title}(${s.artist})` : s.title)).join("、") || "（无）"}`);
+        console.log(`喜欢的歌单：${p.favoritePlaylists.join("、") || "（无）"}`);
+        return;
+      }
+      case "/voice": {
+        if (!ctx.voice) {
+          console.log("当前 voice.provider 不是 mock/sapi，无法使用麦克风采集。用 /voice-file <路径> 走 Whisper 转写，或修改配置。");
+          return;
+        }
+        console.log("按回车开始说话（再次按回车或静音后结束识别）…");
+        await ask(rl, "准备好后按回车 > ");
+        try {
+          const result = await ctx.voice.capture({ maxSeconds: Math.round(ctx.config.voice.recordTimeoutMs / 1000) });
+          console.log(`\n识别结果（${result.providerId}${result.mock ? "，模拟" : ""}）：${result.text}`);
+          const confirm = await ask(rl, "把这句话发给 SassDesk 吗？(y=发送 / 其他=丢弃) > ");
+          if (confirm.trim().toLowerCase() === "y") {
+            await handleLine(result.text);
+            return;
+          }
+          console.log("已丢弃。");
+        } catch (e) {
+          if (e instanceof VoiceError) console.log(`语音识别失败：${e.message}`);
+          else console.log(`语音识别失败：${(e as Error).message}`);
+        }
+        return;
+      }
+      case "/voice-file": {
+        const file = rest[0];
+        if (!file) {
+          console.log("用法：/voice-file <wav或mp3文件路径>");
+          return;
+        }
+        const abs = path.resolve(file);
+        if (!fs.existsSync(abs)) {
+          console.log(`文件不存在：${abs}`);
+          return;
+        }
+        const apiKey = process.env["SASSDESK_STT_API_KEY"] ?? process.env["SASSDESK_API_KEY"] ?? process.env["OPENAI_API_KEY"] ?? "";
+        console.log(`（注意：该模式会把音频上传到 ${ctx.config.voice.sttBaseUrl || "(未配置服务地址)"}）`);
+        try {
+          const result = await transcribeWithWhisper(
+            { baseUrl: ctx.config.voice.sttBaseUrl, model: ctx.config.voice.sttModel, apiKey },
+            abs,
+          );
+          console.log(`识别结果：${result.text}`);
+          const confirm = await ask(rl, "把这句话发给 SassDesk 吗？(y=发送 / 其他=丢弃) > ");
+          if (confirm.trim().toLowerCase() === "y") await handleLine(result.text);
+        } catch (e) {
+          if (e instanceof VoiceError) console.log(`语音识别失败：${e.message}`);
+          else console.log(`语音识别失败：${(e as Error).message}`);
+        }
+        return;
+      }
+      case "/quit":
+        console.log("再见！");
+        rl.close();
+        process.exit(0);
+        break; // eslint-disable-line no-unreachable
+      default:
+        console.log(`未知命令 ${cmd}。输入 /help 查看帮助。`);
+        return;
+    }
+  }
+
+  await new Promise<void>((resolve) => {
+    rl.on("close", () => resolve());
+  });
+}

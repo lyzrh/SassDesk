@@ -46,16 +46,28 @@ export class HkcuRunStartupProvider implements StartupProvider {
   async register(name: string, command: string): Promise<StartupStatus> {
     const entry = sanitizeEntryName(name);
     if (command.trim() === "") throw new Error("启动命令不能为空");
-    // 幂等：Set-ItemProperty 覆盖已有值
+    // 幂等：键已存在时不重建（New-Item -Force 对已存在的 Run 键会报 data area too small），只覆盖属性值
     const script =
-      `$null = New-Item -Path '${RUN_KEY}' -Force; ` +
-      `Set-ItemProperty -Path '${RUN_KEY}' -Name '${entry}' -Value '${psEscape(command)}'; ` +
+      `$runKey = '${RUN_KEY}'; ` +
+      `if (-not (Test-Path $runKey)) { $null = New-Item -Path $runKey }; ` +
+      `Set-ItemProperty -Path $runKey -Name '${entry}' -Value '${psEscape(command)}'; ` +
       `Write-Output 'ok'`;
     const { exitCode, stderr } = await this.ps.run(script, { timeoutMs: 10_000 });
     if (exitCode !== 0) {
       throw new Error(`注册开机启动失败：${stderr.slice(0, 300)}`);
     }
-    return { name: entry, command };
+    // 写后读回校验：Set-ItemProperty 在某些受控环境会静默失败（看似 exitCode 0 但值未落盘）。
+    // 读不回就明确报错，绝不把「命令已发送」伪装成「注册成功」。
+    const verify = await this.getStatus(name);
+    if (!verify || verify.command !== command) {
+      throw new Error(
+        "注册开机启动失败：Set-ItemProperty 已执行，但注册表中读不到刚写入的值。" +
+          "常见原因：当前进程运行在限制注册表写入的沙箱/受控环境中。" +
+          "请在真实终端（非沙箱）中重试，或手动运行：reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v " +
+          `${entry} /t REG_SZ /d "${command}" /f`,
+      );
+    }
+    return verify;
   }
 
   async unregister(name: string): Promise<boolean> {

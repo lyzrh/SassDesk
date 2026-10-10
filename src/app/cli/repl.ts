@@ -94,6 +94,11 @@ export async function startRepl(ctx: AppContext): Promise<void> {
       rl.prompt();
       return;
     }
+    // 忙时保护：任务运行中的新行（包括管道模式授权行）不并发发给 Agent
+    if (currentAgent && currentAgent.isBusy) {
+      console.log("\n(正在处理上一个任务，请稍候；运行中可按 Ctrl+C 取消)");
+      return;
+    }
     if (input.startsWith("/")) {
       await handleCommand(input);
       rl.prompt();

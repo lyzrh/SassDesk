@@ -125,6 +125,7 @@ export function bootstrapApp(opts: { env?: NodeJS.ProcessEnv; log?: boolean; dat
         registry,
         approvalHandler,
         logger,
+        apiKey: config.llm.apiKey.trim() !== "" ? config.llm.apiKey : undefined,
       });
       return agentSingleton;
     },

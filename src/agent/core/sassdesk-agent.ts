@@ -44,6 +44,8 @@ export interface SassDeskAgentOptions {
   registry: ToolRegistry;
   approvalHandler?: ApprovalHandler;
   logger: Logger;
+  /** 配置文件中的 API Key（经 Agent.getApiKey 通道传给 pi-ai；优先级高于环境变量）。 */
+  apiKey?: string;
 }
 
 export class SassDeskAgent {
@@ -67,6 +69,8 @@ export class SassDeskAgent {
         messages: [],
       },
       streamFn: options.models.streamSimple.bind(options.models) as AgentOptions["streamFn"],
+      // 把 SassDesk 配置中的 Key 经 pi-ai 的 getApiKey 通道传入（内置 provider 只查 env/CredentialStore）
+      getApiKey: options.apiKey && options.apiKey.trim() !== "" ? () => options.apiKey : undefined,
       beforeToolCall: createApprovalGate({ registry: options.registry, handler: options.approvalHandler, logger: options.logger }),
       toolExecution: "sequential",
     });

@@ -8,7 +8,7 @@ import { createSassDeskModels, resolveModel, normalizeLlmError } from "./models.
  */
 export async function simpleChat(config: LlmConfig, userText: string, env: NodeJS.ProcessEnv = process.env): Promise<string> {
   try {
-    requireApiKey(config, env);
+    const apiKey = requireApiKey(config, env);
     const { models } = createSassDeskModels(config, env);
     const model = resolveModel(models, config);
     const message = await models.completeSimple(
@@ -17,7 +17,7 @@ export async function simpleChat(config: LlmConfig, userText: string, env: NodeJ
         systemPrompt: "你是 SassDesk，一个运行在用户 Windows 电脑上的中文 AI 员工。请用简体中文、简洁自然地回答。",
         messages: [{ role: "user", content: userText, timestamp: Date.now() }],
       },
-      {},
+      { apiKey },
     );
     if (message.stopReason === "error" || message.stopReason === "aborted") {
       throw normalizeLlmError(new Error(message.errorMessage ?? `stopReason=${message.stopReason}`));

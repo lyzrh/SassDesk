@@ -115,8 +115,25 @@ export function createAutomationTools(deps: AutomationToolsDeps): SassDeskTool<a
         throw new Error(`规则「${params.name}」不存在。可先调用 rule_list 查看。`);
       }
       if (rule.enabled) {
+        // 幂等修复：已启用但开机启动项未注册（如上次注册失败/被外部删除）→ 补注册
+        if (rule.trigger === "startup") {
+          const existing = await deps.startup.getStatus(STARTUP_ENTRY_NAME);
+          if (!existing) {
+            const command = buildStartupCommand();
+            await deps.startup.register(STARTUP_ENTRY_NAME, command);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `规则「${rule.name}」已是启用状态；检测到开机启动项缺失，已补注册（${command}）。`,
+                },
+              ],
+              details: { ...rule, startupRepaired: true },
+            };
+          }
+        }
         return {
-          content: [{ type: "text", text: `规则「${rule.name}」已经是启用状态。` }],
+          content: [{ type: "text", text: `规则「${rule.name}」已经是启用状态，开机启动项也正常。` }],
           details: rule,
         };
       }

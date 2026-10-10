@@ -28,13 +28,14 @@ function setLoadPhase(phase: "loading" | "loaded" | "error"): void {
   errorEl.classList.toggle("hidden", phase !== "error");
 }
 
-/** 三级回退 URL 序列：状态正式图 → 状态占位 SVG → manifest.fallback。 */
+/** 素材回退链：部件动画 SVG（manifest.src）→ AI 静态 PNG（poster）→ 占位 SVG → manifest.fallback。 */
 function imageUrlsFor(state: string): string[] {
   const urls: string[] = [];
   if (config) {
     const st = config.manifest.states[state];
     if (st) {
       urls.push(config.assetsDirUrl + st.src);
+      if (st.poster) urls.push(config.assetsDirUrl + st.poster);
       urls.push(`${config.assetsDirUrl}${state}/placeholder.svg`);
       urls.push(config.assetsDirUrl + config.manifest.fallback);
     }

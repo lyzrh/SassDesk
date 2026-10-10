@@ -27,66 +27,73 @@
   "states": {
     "idle": {
       "label": "待机",
-      "src": "idle/idle.png",
+      "src": "animated/idle.svg",
+      "poster": "idle/idle.png",
       "frames": 1,
       "frameSize": { "width": 240, "height": 240 },
-      "fps": 2,
-      "animation": "breathe",
-      "hints": "自然待机、眨眼、轻微摇尾巴"
+      "fps": 0,
+      "animation": "rigged",
+      "hints": "自然待机、眨眼、尾巴三节波浪摆、耳朵偶发抖动"
     },
     "listening": {
       "label": "聆听",
-      "src": "listening/listening.png",
+      "src": "animated/listening.svg",
+      "poster": "listening/listening.png",
       "frames": 1,
       "frameSize": { "width": 240, "height": 240 },
-      "fps": 4,
-      "animation": "bounce",
-      "hints": "竖起耳朵、专注聆听"
+      "fps": 0,
+      "animation": "rigged",
+      "hints": "双耳竖起快速转向、身体前倾、尾巴快摆"
     },
     "thinking": {
       "label": "思考",
-      "src": "thinking/thinking.png",
+      "src": "animated/thinking.svg",
+      "poster": "thinking/thinking.png",
       "frames": 1,
       "frameSize": { "width": 240, "height": 240 },
-      "fps": 2,
-      "animation": "tilt",
-      "hints": "歪头思考、轻微疑问动作"
+      "fps": 0,
+      "animation": "rigged",
+      "hints": "歪头、托腮轻点、尾巴慢卷"
     },
     "working": {
       "label": "工作",
-      "src": "working/working.png",
+      "src": "animated/working.svg",
+      "poster": "working/working.png",
       "frames": 1,
       "frameSize": { "width": 240, "height": 240 },
-      "fps": 6,
-      "animation": "breathe",
-      "hints": "坐在电脑前认真工作"
+      "fps": 0,
+      "animation": "rigged",
+      "hints": "坐在笔记本前双爪交替打字、屏幕闪烁、专注俯身"
     },
     "success": {
       "label": "成功",
-      "src": "success/success.png",
+      "src": "animated/success.svg",
+      "poster": "success/success.png",
       "frames": 1,
       "frameSize": { "width": 240, "height": 240 },
-      "fps": 4,
-      "animation": "bounce",
-      "hints": "开心、尾巴翘起"
+      "fps": 0,
+      "animation": "rigged",
+      "hints": "弹跳庆祝、双臂上举挥动、尾巴高频摇摆、星光闪烁"
     },
     "error": {
       "label": "出错",
-      "src": "error/error.png",
+      "src": "animated/error.svg",
+      "poster": "error/error.png",
       "frames": 1,
       "frameSize": { "width": 240, "height": 240 },
-      "fps": 2,
-      "animation": "shake",
-      "hints": "困惑、沮丧（不是恐怖/崩坏表情）"
+      "fps": 0,
+      "animation": "rigged",
+      "hints": "耳朵耷拉颤动、身体萎缩、摇头"
     },
     "sleeping": {
       "label": "休息",
-      "src": "sleeping/sleeping.png",
+      "src": "animated/sleeping.svg",
+      "poster": "sleeping/sleeping.png",
       "frames": 1,
       "frameSize": { "width": 240, "height": 240 },
-      "fps": 1,
-      "animation": "breathe-slow",
-      "hints": "趴着休息、轻微呼吸"
+      "fps": 0,
+      "animation": "rigged",
+      "hints": "趴姿、缓慢呼吸起伏、尾巴慢摆"
     }
   }
 }

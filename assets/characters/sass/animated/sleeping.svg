@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
+<!-- Sass animated rig (部件化肢体动画)：状态 sleeping -->
+<style>
+  * { transform-box: fill-box; }
+  
+    .tail-1, .tail-2, .tail-3 { animation-timing-function: ease-in-out; animation-iteration-count: infinite; }
+    .glow { animation: glowPulse 2s ease-in-out infinite; }
+    @keyframes glowPulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .star { animation: starTwinkle 1.4s ease-in-out infinite; }
+    @keyframes starTwinkle { 0%,100% { opacity: .25; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.15); } }
+  
+      /* 趴姿慢呼吸 */
+      .body { animation: sleepBreathe 3.2s ease-in-out infinite; }
+      @keyframes sleepBreathe { 0%,100% { transform: scaleY(1) translateY(0); } 50% { transform: scaleY(1.05) translateY(1px); } }
+      .head { animation: sleepHead 3.2s ease-in-out infinite; }
+      @keyframes sleepHead { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(2px) rotate(-2deg); } }
+      .tail-1 { animation: tailSleep 4.5s infinite; } .tail-2 { animation: tailSleep 4.5s infinite -.5s; } .tail-3 { animation: tailSleep 4.5s infinite -1s; }
+      @keyframes tailSleep { 0%,100% { transform: rotate(2deg); } 50% { transform: rotate(-2deg); } }
+      .ear-l, .ear-r { animation: none; }
+      
+</style>
+<g transform="translate(120, 140) scale(1.04, .92)">
+  <g class="tail tail-1" style="transform-box:fill-box;transform-origin:0% 50%">
+    <circle cx="28" cy="90" r="17" fill="#8DA3B8"/>
+    <g class="tail-2" style="transform-box:fill-box;transform-origin:0% 50%">
+      <circle cx="58" cy="98" r="15" fill="#8DA3B8"/>
+      <g class="tail-3" style="transform-box:fill-box;transform-origin:0% 50%">
+        <circle cx="80" cy="82" r="12.5" fill="#FDFEFF"/>
+      </g>
+    </g>
+  </g>
+  <g class="body" style="transform-box:fill-box;transform-origin:50% 100%">
+      <ellipse cx="0" cy="66" rx="60" ry="26" fill="#2B3440"/>
+      <ellipse cx="0" cy="60" rx="46" ry="18" fill="#3A4756"/>
+      <ellipse cx="-44" cy="72" rx="13" ry="7" fill="#8DA3B8"/>
+      <ellipse cx="44" cy="72" rx="13" ry="7" fill="#8DA3B8"/>
+    </g>
+  
+  <g class="head" style="transform-box:fill-box;transform-origin:50% 95%">
+    <g class="ear ear-l" style="transform-box:fill-box;transform-origin:50% 100%">
+    <g transform="translate(-22, -34) rotate(-14)">
+      <path d="M0 26 L-4 -22 L20 8 Z" fill="#5B7A99"/>
+      <path d="M2 18 L-1 -8 L13 8 Z" fill="#C7D3DE"/>
+      <path d="M-2 -22 L20 8" stroke="#5B7A99" stroke-width="6" stroke-linecap="round" fill="none"/>
+    </g>
+  </g><g class="ear ear-r" style="transform-box:fill-box;transform-origin:50% 100%">
+    <g transform="translate(22, -34) rotate(14) scale(-1,1)">
+      <path d="M0 26 L-4 -22 L20 8 Z" fill="#5B7A99"/>
+      <path d="M2 18 L-1 -8 L13 8 Z" fill="#C7D3DE"/>
+      <path d="M-2 -22 L20 8" stroke="#5B7A99" stroke-width="6" stroke-linecap="round" fill="none"/>
+    </g>
+  </g>
+    <circle cx="0" cy="0" r="42" fill="#8DA3B8"/>
+    <path d="M0 34 Q-30 32 -36 6 Q-18 30 0 30 Q18 30 36 6 Q30 32 0 34 Z" fill="#FDFEFF"/>
+    <ellipse cx="0" cy="38" rx="12" ry="8" fill="#FDFEFF"/>
+    <path d="M-20 0 L-6 0" stroke="#1E2A36" stroke-width="4.5" stroke-linecap="round"/><path d="M6 0 L20 0" stroke="#1E2A36" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M-4 22 L4 22 L0 27 Z" fill="#1E2A36"/>
+    <path d="M-4 27 L4 27" stroke="#1E2A36" stroke-width="3.5" stroke-linecap="round"/>
+    
+    <path d="M-40 -8 Q0 -52 40 -8" stroke="#2B3440" stroke-width="9" fill="none" stroke-linecap="round"/>
+    <rect x="-52" y="-12" width="14" height="22" rx="6" fill="#2B3440"/>
+    <rect x="38" y="-12" width="14" height="22" rx="6" fill="#2B3440"/>
+    <rect x="-49" y="-6" width="8" height="4" rx="2" fill="#59C2FF" class="glow"/>
+    <rect x="41" y="-6" width="8" height="4" rx="2" fill="#59C2FF" class="glow"/>
+    <circle cx="0" cy="-40" r="4.5" fill="#59C2FF" class="glow"/>
+  </g>
+  
+  <g class="arm arm-r" style="transform-box:fill-box;transform-origin:0% 15%"><g transform="translate(30, 52) rotate(0)"><rect x="-4" y="0" width="14" height="34" rx="7" fill="#2B3440"/><circle cx="3" cy="36" r="8" fill="#8DA3B8"/></g></g>
+  
+</g>
+</svg>

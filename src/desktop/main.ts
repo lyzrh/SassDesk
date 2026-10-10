@@ -46,7 +46,7 @@ const assetsDirUrl = pathToFileURL(charAssetsDir.endsWith(path.sep) ? charAssets
 
 interface PetManifest {
   fallback: string;
-  states: Record<string, { src: string; animation: string; label: string }>;
+  states: Record<string, { src: string; poster?: string; animation: string; label: string }>;
 }
 
 let ctx: AppContext;

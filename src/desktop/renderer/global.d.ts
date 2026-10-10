@@ -14,7 +14,7 @@ export interface SassDeskStateData {
 export interface SassDeskPetConfig {
   manifest: {
     fallback: string;
-    states: Record<string, { src: string; animation: string; label: string }>;
+    states: Record<string, { src: string; poster?: string; animation: string; label: string }>;
   };
   assetsDirUrl: string;
 }

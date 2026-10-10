@@ -1,8 +1,8 @@
 # SassDesk
 
-基于 [Pi Agent](https://github.com/earendil-works/pi)（`@earendil-works/pi-agent-core` + `@earendil-works/pi-ai`，MIT）的个人桌面 AI 员工，运行在 Windows 10/11 上。v0.1.0 形态为 **CLI**。
+基于 [Pi Agent](https://github.com/earendil-works/pi)（`@earendil-works/pi-agent-core` + `@earendil-works/pi-ai`，MIT）的个人桌面 AI 员工，运行在 Windows 10/11 上。**v0.2.0 新增桌面宠物形态**（Electron），CLI 与桌宠共存。
 
-你用中文告诉它要做什么（文本或语音转文本），它理解意图、调用经过授权的系统工具、验证真实结果并如实反馈。
+你用中文告诉它要做什么（文本或语音转文本），它理解意图、调用经过授权的系统工具、验证真实结果并如实反馈。桌宠角色 **Sass（萨斯）**——灰蓝色小狐狸——会随真实任务生命周期切换状态：待机 → 聆听 → 思考 → 工作 → 成功/出错。
 
 ```
 大肥鱼> 现在打开 QQ 音乐
@@ -56,10 +56,26 @@ npm start
 | 命令 | 说明 |
 |---|---|
 | `npm start` | 启动 CLI |
+| `npm run desktop` | 启动桌面宠物（Electron；托盘：对话/显示/隐藏/退出） |
+| `start-cli.cmd` | 双击启动 CLI |
+| `start-desktop.cmd` | 双击启动桌宠 |
 | `npm run startup-run` | 开机执行模式：运行所有已启用的开机规则后退出 |
-| `npm test` | 运行全部测试（58 例，不触碰真实系统） |
+| `npm test` | 运行全部测试（72 例，不触碰真实系统） |
 | `npm run typecheck` | TypeScript 严格类型检查 |
-| `npm run build` | 构建到 dist/ |
+| `npm run build` | 构建到 dist/（含桌宠资源复制） |
+
+## 桌面宠物（v0.2.0）
+
+```powershell
+npm run build
+npm run desktop     # 或双击 start-desktop.cmd
+```
+
+- 透明无边框小窗（240×280），Sass 常驻桌面右下角托盘；可拖动、可隐藏
+- 托盘「对话…」弹输入小窗 → 真实 Agent 执行 → 结果以气泡展示
+- 状态机由**真实事件驱动**（用户输入 / Agent 生命周期 / 结构化成败判定），不靠关键词匹配
+- 素材体系：`assets/characters/sass/manifest.json`（状态→素材/动画/回退）；7 状态 AI 生成透明 PNG + 缺图三级回退（正式图 → 占位 SVG → 内置兜底），详见 `docs/character-assets.md`
+- 隐私与安全：不设开机自启、不开麦克风监听、不截屏；`contextIsolation` 开启、渲染进程无 Node 能力
 
 ## CLI 内置命令
 

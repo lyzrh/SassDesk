@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+    html, body { width: 320px; height: 84px; background: transparent; overflow: hidden; }
+    body { display: flex; align-items: center; justify-content: center; }
+    .panel {
+      width: 304px; padding: 10px; background: #222b36f2; border: 1px solid #59c2ff66;
+      border-radius: 14px; display: flex; gap: 8px; -webkit-app-region: drag;
+    }
+    input {
+      flex: 1; background: #141a22; color: #e8eef5; border: 1px solid #3a4756;
+      border-radius: 8px; padding: 7px 10px; font: 13px "Microsoft YaHei", sans-serif;
+      outline: none; -webkit-app-region: no-drag;
+    }
+    input:focus { border-color: #59c2ff; }
+    input::placeholder { color: #6b7c8e; }
+    button {
+      background: #59c2ff; color: #141a22; border: none; border-radius: 8px;
+      padding: 7px 14px; font: 13px "Microsoft YaHei", sans-serif; font-weight: 600;
+      cursor: pointer; -webkit-app-region: no-drag;
+    }
+    button:disabled { background: #3a4756; color: #6b7c8e; cursor: default; }
+    button.busy { animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <input id="text" placeholder="给 Sass 下达任务…" maxlength="500" />
+    <button id="send">发送</button>
+  </div>
+  <script src="./input.js"></script>
+</body>
+</html>

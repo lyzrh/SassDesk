@@ -3,11 +3,22 @@ import fs from "node:fs";
 import path from "node:path";
 import { createEventBridge } from "../../agent/core/events.js";
 import type { ApprovalHandler, ApprovalRequest } from "../../agent/core/approval.js";
-import { SassDeskError, isSassDeskError } from "../../shared/errors.js";
-import { isSassDeskError as isSde } from "../../shared/errors.js";
+import { PetController } from "../../desktop/pet-controller.js";
+import { SassDeskError } from "../../shared/errors.js";
 import type { AppContext } from "../bootstrap.js";
 import { transcribeWithWhisper } from "../voice/providers/whisper.js";
 import { VoiceError } from "../voice/types.js";
+
+/** 状态中文标签（CLI 状态提示用）。 */
+const STATE_LABELS: Record<string, string> = {
+  idle: "待机",
+  listening: "聆听中…",
+  thinking: "思考中…",
+  working: "工作中…",
+  success: "任务完成！",
+  error: "出错了",
+  sleeping: "休息中（zzz）",
+};
 
 /**
  * SassDesk CLI（v0.1.0）：
@@ -36,7 +47,7 @@ function ask(rl: readline.Interface, question: string): Promise<string> {
 }
 
 const HELP_TEXT = [
-  "SassDesk v0.1.0 —— 你的桌面 AI 员工",
+  "SassDesk v0.2.0 —— 你的桌面 AI 员工",
   "",
   "用法：直接输入中文任务（如「现在打开 QQ 音乐」「以后每次开机自动打开 QQ 音乐」）。",
   "",
@@ -44,6 +55,7 @@ const HELP_TEXT = [
   "  /help              显示帮助",
   "  /rules             查看自动化规则",
   "  /startup           查看开机启动状态",
+  "  /pet               查看 Sass 当前状态",
   "  /voice             按键录音并语音识别（需 voice.provider=sapi，音频不出本机）",
   "  /voice-file <路径>  用 Whisper 兼容服务转写音频文件（音频会上传到配置的服务）",
   "  /prefs             查看音乐偏好",
@@ -58,6 +70,13 @@ export async function startRepl(ctx: AppContext): Promise<void> {
   });
 
   const approval = new InteractiveApprovalHandler(rl);
+  // 角色状态机：由真实用户交互与 Agent 生命周期事件驱动
+  const pet = new PetController();
+  pet.subscribe(({ to, reason }) => {
+    const tag = STATE_LABELS[to] ?? to;
+    process.stdout.write(`\n[Sass] ${tag}${to === "error" && reason ? `（${reason.split("\n")[0]?.slice(0, 60)}）` : ""}\n`);
+    rl.prompt(true);
+  });
   console.log(HELP_TEXT);
   console.log(`\n数据目录：${ctx.dataDir}\n配置目录：${ctx.configDir}\n`);
   rl.prompt();
@@ -105,10 +124,9 @@ export async function startRepl(ctx: AppContext): Promise<void> {
       return;
     }
 
-    // 普通输入 → Agent
+    // 普通输入 → Agent（经 PetController 驱动角色状态：listening/thinking → working → success/error）
     const agent = await ctx.ensureAgent(approval);
     currentAgent = agent;
-    const running = agent;
     agent.subscribe(
       createEventBridge({
         onTextDelta: (d) => process.stdout.write(d),
@@ -118,7 +136,7 @@ export async function startRepl(ctx: AppContext): Promise<void> {
       }),
     );
     try {
-      const result = await running.run(input);
+      const result = await pet.runWithAgent(agent, input);
       if (result.text !== "") {
         process.stdout.write("\n");
       }
@@ -131,7 +149,7 @@ export async function startRepl(ctx: AppContext): Promise<void> {
       const used = result.toolCalls.length;
       ctx.logger.info({ iterations: result.iterations, toolCalls: used }, "任务完成");
     } catch (e) {
-      if (isSassDeskError(e)) console.log(`任务失败：${e.toUserMessage()}`);
+      if (e instanceof SassDeskError) console.log(`任务失败：${e.toUserMessage()}`);
       else console.log(`任务失败：${(e as Error).message}`);
     } finally {
       currentAgent = null;
@@ -166,6 +184,10 @@ export async function startRepl(ctx: AppContext): Promise<void> {
         console.log(`喜欢的歌单：${p.favoritePlaylists.join("、") || "（无）"}`);
         return;
       }
+      case "/pet": {
+        console.log(`[Sass] 当前状态：${STATE_LABELS[pet.state] ?? pet.state}`);
+        return;
+      }
       case "/voice": {
         if (!ctx.voice) {
           console.log("当前 voice.provider 不是 mock/sapi，无法使用麦克风采集。用 /voice-file <路径> 走 Whisper 转写，或修改配置。");
@@ -173,16 +195,20 @@ export async function startRepl(ctx: AppContext): Promise<void> {
         }
         console.log("按回车开始说话（再次按回车或静音后结束识别）…");
         await ask(rl, "准备好后按回车 > ");
+        pet.inputStart(); // 录音开始 → LISTENING
         try {
           const result = await ctx.voice.capture({ maxSeconds: Math.round(ctx.config.voice.recordTimeoutMs / 1000) });
           console.log(`\n识别结果（${result.providerId}${result.mock ? "，模拟" : ""}）：${result.text}`);
           const confirm = await ask(rl, "把这句话发给 SassDesk 吗？(y=发送 / 其他=丢弃) > ");
           if (confirm.trim().toLowerCase() === "y") {
+            pet.inputEnd(); // 录音结束 → THINKING（随后 runWithAgent 接管）
             await handleLine(result.text);
             return;
           }
+          pet.wake(); // 丢弃 → 回待机
           console.log("已丢弃。");
         } catch (e) {
+          pet.wake();
           if (e instanceof VoiceError) console.log(`语音识别失败：${e.message}`);
           else console.log(`语音识别失败：${(e as Error).message}`);
         }
@@ -217,6 +243,7 @@ export async function startRepl(ctx: AppContext): Promise<void> {
       }
       case "/quit":
         console.log("再见！");
+        pet.dispose();
         rl.close();
         process.exit(0);
         break; // eslint-disable-line no-unreachable

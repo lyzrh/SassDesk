@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+    html, body { width: 240px; height: 280px; background: transparent; overflow: hidden; }
+    body { display: flex; flex-direction: column; align-items: center; }
+    /* 气泡 */
+    #bubble {
+      max-width: 228px; min-width: 60px; max-height: 92px; overflow: hidden;
+      background: #222b36cc; color: #e8eef5; border: 1px solid #59c2ff55;
+      border-radius: 12px; padding: 8px 12px; font: 12px/1.5 "Microsoft YaHei", sans-serif;
+      position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
+      opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 10;
+      -webkit-app-region: no-drag;
+    }
+    #bubble.show { opacity: 1; }
+    #bubble .accent { color: #59c2ff; }
+    /* 角色区域：可拖动 */
+    #pet { -webkit-app-region: drag; width: 240px; height: 240px; position: relative; margin-top: auto; }
+    #pet img {
+      position: absolute; inset: 0; width: 240px; height: 240px;
+      object-fit: contain; -webkit-user-drag: none; transform-origin: 50% 90%;
+    }
+    /* 程序化动画（单帧素材 + CSS 变换） */
+    img[data-anim="breathe"] { animation: breathe 3.2s ease-in-out infinite; }
+    img[data-anim="breathe-slow"] { animation: breathe 5.5s ease-in-out infinite; }
+    img[data-anim="bounce"] { animation: bounce 1.6s ease-in-out infinite; }
+    img[data-anim="tilt"] { animation: tilt 3s ease-in-out infinite; }
+    img[data-anim="shake"] { animation: shake .9s ease-in-out 3; }
+    @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+    @keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+    @keyframes tilt { 0%,100% { transform: rotate(0deg); } 30% { transform: rotate(-5deg); } 70% { transform: rotate(4deg); } }
+    @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+    /* 状态角标 */
+    #badge {
+      position: absolute; right: 6px; top: 6px; font: 10px/1.4 "Microsoft YaHei", sans-serif;
+      background: #222b36cc; color: #9fb3c8; border-radius: 8px; padding: 1px 8px; z-index: 9;
+      -webkit-app-region: no-drag;
+    }
+  </style>
+</head>
+<body>
+  <div id="bubble"></div>
+  <div id="pet"><img id="pet-img" alt="Sass" draggable="false" /><span id="badge"></span></div>
+  <script type="module" src="./pet.js"></script>
+</body>
+</html>

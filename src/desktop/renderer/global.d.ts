@@ -41,12 +41,14 @@ export interface SassDeskBridge {
       model: string;
       textures: string[];
       physics?: string;
+      pose?: string;
       motions?: Record<string, Array<{ file: string }>>;
       layout?: { center_x?: number; center_y?: number; width?: number };
     };
     moc: Uint8Array;
     textures: Uint8Array[];
     motions: Record<string, Uint8Array[]>;
+    pose?: Uint8Array;
   } | null>;
 }
 

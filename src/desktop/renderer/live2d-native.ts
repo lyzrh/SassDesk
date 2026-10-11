@@ -19,6 +19,7 @@ export interface NativeModelFiles {
     model: string;
     textures: string[];
     physics?: string;
+    pose?: string;
     motions?: Record<string, Array<{ file: string }>>;
     layout?: { center_x?: number; center_y?: number; width?: number };
   };
@@ -27,6 +28,74 @@ export interface NativeModelFiles {
   textures: Uint8Array[];
   /** 语义组 → mtn 文件二进制（idle/thinking/working/success/click） */
   motions: Record<string, Uint8Array[]>;
+  /** pose 文件二进制（可选，部件互斥显隐组） */
+  pose?: Uint8Array;
+}
+
+/* ---------- Pose：部件互斥显隐组（Cubism2 pose.json，移植自 pixi-live2d-display） ---------- */
+
+interface PoseParamRef {
+  paramIndex: number;
+  partsIndex: number;
+  link: Array<{ paramIndex: number; partsIndex: number }>;
+}
+
+class PoseLite {
+  private groups: PoseParamRef[][] = [];
+
+  constructor(coreModel: any, json: any) {
+    const PartsDataID = (window as unknown as { PartsDataID?: { getID(id: string): unknown } }).PartsDataID;
+    if (!json?.parts_visible || !PartsDataID) return;
+    for (const { group } of json.parts_visible) {
+      const g: PoseParamRef[] = group.map(({ id, link }: { id: string; link?: Array<{ id: string }> }) => {
+        const p: PoseParamRef = { paramIndex: -1, partsIndex: -1, link: [] };
+        p.paramIndex = coreModel.getParamIndex(`VISIBLE:${id}`);
+        p.partsIndex = coreModel.getPartsDataIndex(PartsDataID.getID(id));
+        coreModel.setParamFloat(p.paramIndex, 1);
+        for (const l of link ?? []) {
+          const lp: { paramIndex: number; partsIndex: number } = { paramIndex: -1, partsIndex: -1 };
+          lp.paramIndex = coreModel.getParamIndex(`VISIBLE:${l.id}`);
+          lp.partsIndex = coreModel.getPartsDataIndex(PartsDataID.getID(l.id));
+          coreModel.setParamFloat(lp.paramIndex, 1);
+          p.link.push(lp);
+        }
+        return p;
+      });
+      // 初始：每组第一个部件可见
+      g.forEach((p, i) => {
+        const v = i === 0 ? 1 : 0;
+        coreModel.setPartsOpacity(p.partsIndex, v);
+        if (p.paramIndex >= 0) coreModel.setParamFloat(p.paramIndex, v);
+        for (const lp of p.link) coreModel.setPartsOpacity(lp.partsIndex, v);
+      });
+      this.groups.push(g);
+    }
+    console.log(`[live2d-native] pose 组: ${this.groups.length}`);
+  }
+
+  /** 每帧：motion 设置的 VISIBLE: 参数决定各组显示哪个部件，opacity 渐变（500ms） */
+  update(dt: number, coreModel: any): void {
+    if (this.groups.length === 0) return;
+    const step = dt / 0.5;
+    for (const g of this.groups) {
+      let visibleIndex = 0;
+      let maxOpacity = -1;
+      g.forEach((p, i) => {
+        const op = p.paramIndex >= 0 ? coreModel.getParamFloat(p.paramIndex) : coreModel.getPartsOpacity(p.partsIndex);
+        if (op > maxOpacity) {
+          maxOpacity = op;
+          visibleIndex = i;
+        }
+      });
+      g.forEach((p, i) => {
+        const target = i === visibleIndex ? 1 : 0;
+        const cur = coreModel.getPartsOpacity(p.partsIndex);
+        const next = target > cur ? Math.min(target, cur + step) : Math.max(target, cur - step);
+        coreModel.setPartsOpacity(p.partsIndex, next);
+        for (const lp of p.link) coreModel.setPartsOpacity(lp.partsIndex, next);
+      });
+    }
+  }
 }
 
 const STATE_MOTION: Record<string, string> = {
@@ -129,6 +198,7 @@ export class Live2DNative {
   private model: any = null;
   private player = new MotionPlayer();
   private playerMotions: Record<string, MtnMotion[]> = {};
+  private pose: PoseLite | null = null;
   private raf: number | null = null;
   private state: string = "idle";
 
@@ -235,6 +305,16 @@ export class Live2DNative {
       console.log(`[live2d-native] 动作组 ${group}: ${parsed.length} 个解析成功`);
     }
 
+    // 4.5 pose（部件互斥显隐组）：shizuku 等模型的重影/错乱多因缺 pose
+    if (files.pose) {
+      try {
+        const poseJson = JSON.parse(new TextDecoder("utf-8").decode(files.pose));
+        this.pose = new PoseLite(this.model, poseJson);
+      } catch (e) {
+        console.warn(`[live2d-native] pose 解析失败: ${(e as Error).message}`);
+      }
+    }
+
     // 5. 矩阵：模型画布 (0..W, 0..H) → NDC 全画布，模型完整显示
     //    （hallo 自带的 layout=width 2.7/center_y -0.6 是 Live2DViewerEX 大窗口配置，
     //     在 240×280 桌宠窗口会把模型放大下移到几乎全出屏，故不采用）
@@ -281,19 +361,8 @@ export class Live2DNative {
 
     // 动作播放（自实现播放器）
     this.player.update(this.model);
-    // 诊断：采样动作后的关键参数值（判断 mtn 解析/插值是否正常）
-    if (this.raf !== null && Math.random() < 0.008) {
-      const ids = ["PARAM_ANGLE_X", "PARAM_ANGLE_Y", "PARAM_ANGLE_Z", "PARAM_BODY_ANGLE_X", "PARAM_MOUTH_OPEN_Y"];
-      const vals = ids.map((id) => {
-        try {
-          const v = this.model.getParamFloat(this.model.getParamIndex(id));
-          return `${id}=${Number.isFinite(v) ? v.toFixed(2) : String(v)}`;
-        } catch {
-          return `${id}=err`;
-        }
-      });
-      console.log(`[live2d-native] 参数采样: ${vals.join(" ")}`);
-    }
+    // pose 应用（motion 的 VISIBLE: 参数 → 部件互斥渐变）
+    this.pose?.update(dt, this.model);
 
     // 眨眼（自实现：2~5 秒随机，150ms 闭合曲线）
     // 注意：参数覆盖范围严格限制在 core 参数标准域（避免超范围变形）；BARE=1 时只播 motion 排查参数干扰

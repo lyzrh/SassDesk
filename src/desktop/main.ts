@@ -158,6 +158,7 @@ function readModelFiles(): {
   moc: Uint8Array;
   textures: Uint8Array[];
   motions: Record<string, Uint8Array[]>;
+  pose?: Uint8Array;
 } | null {
   if (!live2dModelUrl) return null;
   try {
@@ -169,6 +170,8 @@ function readModelFiles(): {
     const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8")) as {
       model: string;
       textures: string[];
+      physics?: string;
+      pose?: string;
       motions?: Record<string, Array<{ file: string }>>;
     };
     const moc = fs.readFileSync(path.join(dir, settings.model));
@@ -177,8 +180,9 @@ function readModelFiles(): {
     for (const [group, list] of Object.entries(settings.motions ?? {})) {
       motions[group] = list.map((m) => fs.readFileSync(path.join(dir, m.file)));
     }
-    logLine(`[SassDesk] 模型文件读取：${Object.keys(motions).join("/")} 动作组，贴图 ${textures.length} 张`);
-    return { modelDirName: path.basename(dir), settings, moc, textures, motions };
+    const pose = settings.pose ? fs.readFileSync(path.join(dir, settings.pose)) : undefined;
+    logLine(`[SassDesk] 模型文件读取：${Object.keys(motions).join("/")} 动作组，贴图 ${textures.length} 张${pose ? "，pose ✓" : ""}`);
+    return { modelDirName: path.basename(dir), settings, moc, textures, motions, pose };
   } catch (e) {
     logLine(`[SassDesk] 模型文件读取失败：${(e as Error).message}`);
     return null;

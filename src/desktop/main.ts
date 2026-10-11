@@ -17,7 +17,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } from "electron";
 import type { PetState } from "./state-machine.js";
 import { bootstrapApp, type AppContext } from "../app/bootstrap.js";
+import { createEventBridge } from "../agent/core/events.js";
 import { PetController } from "./pet-controller.js";
+import { ChatStore } from "./chat-store.js";
+import { spawn } from "node:child_process";
 
 const here = path.dirname(fileURLToPath(import.meta.url)); // dist/desktop
 const rendererDir = path.join(here, "renderer");
@@ -79,6 +82,12 @@ let manifest: PetManifest;
 let pet: PetController;
 let petWin: BrowserWindow | null = null;
 let inputWin: BrowserWindow | null = null;
+/** 控制面板（聊天 + CLI 入口）窗口 */
+let panelWin: BrowserWindow | null = null;
+/** 聊天记录持久化（<dataDir>/chat.json） */
+let chatStore: ChatStore | null = null;
+/** 正在流式输出的助手消息 id */
+let streamingMsgId: string | null = null;
 let tray: Tray | null = null;
 let agent: Awaited<ReturnType<AppContext["ensureAgent"]>> | null = null;
 /** 桌宠服务端口（固定端口供 CLI 发现；被占用自动回退随机）。 */
@@ -246,6 +255,17 @@ function pushBubble(text: string, accent = false): void {
   petWin?.webContents.send("pet:bubble", { text, accent });
 }
 
+/** 读取本进程写入的桌宠发现文件（面板查询用）。 */
+function readPetInfoLocal(): { port: number; pid: number } | null {
+  try {
+    const p = path.join(ctx.configDir, "pet.json");
+    if (!fs.existsSync(p)) return null;
+    return JSON.parse(fs.readFileSync(p, "utf-8")) as { port: number; pid: number };
+  } catch {
+    return null;
+  }
+}
+
 /** 读取 Live2D 模型全量文件（渲染层经 IPC 获取，绕开 file:// fetch 限制）。 */
 function readModelFiles(): {
   modelDirName: string;
@@ -393,6 +413,114 @@ function createInputWindow(): void {
   inputWin.on("closed", () => (inputWin = null));
 }
 
+/**
+ * 控制面板窗口：聊天（流式）+ 终端（CLI 入口）。
+ * 入口：角色窗口双击 / 托盘「控制面板…」/ 面板内按钮。
+ */
+function createPanelWindow(): void {
+  if (panelWin && !panelWin.isDestroyed()) {
+    panelWin.show();
+    panelWin.focus();
+    return;
+  }
+  panelWin = new BrowserWindow({
+    width: 460,
+    height: 620,
+    minWidth: 380,
+    minHeight: 420,
+    backgroundColor: "#1a2029",
+    title: "Sass 控制面板",
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(here, "preload.mjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  void panelWin.loadFile(path.join(rendererDir, "panel.html"));
+  panelWin.on("closed", () => (panelWin = null));
+}
+
+/** 聊天消息发送：走真实 Agent（与 CLI 同一内核），流式推送到面板。 */
+async function handleChatSend(text: string): Promise<{ ok: boolean; reply: string }> {
+  const trimmed = text.trim();
+  if (trimmed === "") return { ok: false, reply: "内容为空" };
+  const store = chatStore;
+  if (!store) return { ok: false, reply: "聊天存储未就绪" };
+  store.append("user", trimmed);
+
+  // API 关闭：不调用模型，明确告知
+  if (!ctx.config.llm.enabled) {
+    const tip = "当前未接入模型 API（纯命令模式）。在 CLI 里输入 /api on 可开启对话与任务能力。";
+    store.append("system", tip);
+    return { ok: false, reply: tip };
+  }
+  if (pet.state === "working") {
+    const busy = "我正在忙，稍等一下下～";
+    store.append("system", busy);
+    return { ok: false, reply: "busy" };
+  }
+
+  try {
+    if (!agent) agent = await ctx.ensureAgent();
+    // 预留助手消息并流式更新
+    const pending = store.append("assistant", "", { partial: true });
+    streamingMsgId = pending.id;
+    const unsubscribe = agent.subscribe(
+      createChatEventBridge((delta) => {
+        if (streamingMsgId) panelWin?.webContents.send("chat:delta", { id: streamingMsgId, text: delta });
+      }),
+    );
+    const result = await pet.runWithAgent(agent, trimmed);
+    unsubscribe();
+    const reply = result.text.trim() !== "" ? result.text.trim() : result.errorMessage ?? "（这次没有文字回复）";
+    store.updateLast(pending.id, { text: reply, partial: false });
+    panelWin?.webContents.send("chat:done", { id: pending.id, text: reply, ok: !result.errorMessage });
+    return { ok: !result.errorMessage, reply };
+  } catch (e) {
+    const msg = (e as Error).message ?? String(e);
+    const errMsg = store.append("assistant", `出错了…${msg}`);
+    panelWin?.webContents.send("chat:done", { id: errMsg.id, text: errMsg.text, ok: false });
+    return { ok: false, reply: msg };
+  } finally {
+    streamingMsgId = null;
+  }
+}
+
+/** 聊天流式桥：累积本轮文本增量，整段推给面板（避免逐字 IPC 洪泛）。 */
+function createChatEventBridge(onText: (full: string) => void) {
+  let acc = "";
+  return createEventBridge({
+    onTextDelta: (d) => {
+      acc += d;
+      onText(acc);
+    },
+  });
+}
+
+/** 打开 CLI 窗口：独立终端跑 CLI REPL（与桌宠/面板互不干扰）。 */
+function openCliWindow(): { ok: boolean; message: string } {
+  try {
+    const projectRoot = root();
+    const isWin = process.platform === "win32";
+    if (isWin) {
+      const child = spawn("cmd.exe", ["/c", "npm start"], {
+        cwd: projectRoot,
+        detached: true,
+        stdio: "ignore",
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } as NodeJS.ProcessEnv,
+      });
+      child.unref();
+      return { ok: true, message: "CLI 窗口已打开（新终端窗口）" };
+    }
+    // 非 Windows：回退为提示
+    return { ok: false, message: "非 Windows 环境：请在终端运行 npm start" };
+  } catch (e) {
+    return { ok: false, message: `启动失败：${(e as Error).message}` };
+  }
+}
+
 function createTray(): void {
   const iconPath = path.join(charAssetsDir, "idle", "idle.png");
   const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
@@ -400,7 +528,9 @@ function createTray(): void {
   tray.setToolTip("SassDesk - Sass（萨斯）");
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "对话…", click: () => createInputWindow() },
+      { label: "控制面板（聊天）…", click: () => createPanelWindow() },
+      { label: "对话输入框…", click: () => createInputWindow() },
+      { label: "打开 CLI 窗口", click: () => openCliWindow() },
       { type: "separator" },
       { label: "显示桌宠", click: () => createPetWindow() },
       { label: "隐藏桌宠", click: () => petWin?.hide() },
@@ -408,7 +538,7 @@ function createTray(): void {
       { label: "退出 SassDesk", click: () => app.quit() },
     ]),
   );
-  tray.on("double-click", () => createInputWindow());
+  tray.on("double-click", () => createPanelWindow());
 }
 
 async function handleSubmit(text: string): Promise<{ ok: boolean; reply: string }> {
@@ -440,6 +570,8 @@ app.whenReady().then(() => {
   live2dModelUrl = resolveLive2dModel();
   startModelServer();
 
+  chatStore = new ChatStore(ctx.dataDir);
+
   pet = new PetController();
   pet.subscribe(({ from, to, reason }) => {
     pushState(to, reason);
@@ -448,9 +580,70 @@ app.whenReady().then(() => {
   createTray();
   startCursorPolling();
 
+  // 开发自测：SASSDESK_SMOKE=cli → 验证 CLI 窗口拉起
+  if (process.env.SASSDESK_SMOKE === "cli") {
+    setTimeout(() => {
+      const r = openCliWindow();
+      logLine(`[smoke-cli] ${r.ok ? "ok" : "fail"}：${r.message}`);
+      setTimeout(() => app.quit(), 6_000);
+    }, 2_000);
+  }
+  // 开发自测：SASSDESK_SMOKE=chat → 自动跑一遍「面板 → 聊天 → 流式 → 持久化」链路后退出
+  if (process.env.SASSDESK_SMOKE === "chat") {
+    setTimeout(() => {
+      void (async () => {
+        try {
+          createPanelWindow();
+          panelWin?.webContents.on("console-message", (_e, _l, message) => logLine(`[panel] ${message}`));
+          panelWin?.webContents.on("did-finish-load", () => logLine("[smoke] 面板页面加载完成"));
+          panelWin?.webContents.on("did-fail-load", (_e, code, desc) => logLine(`[smoke] 面板加载失败 ${code} ${desc}`));
+          logLine("[smoke] 面板窗口已创建");
+          const res = await handleChatSend("请用一句话介绍你自己");
+          logLine(`[smoke] 聊天结果（${res.ok ? "ok" : "fail"}）：${res.reply.slice(0, 140)}`);
+          const fresh = new ChatStore(ctx.dataDir);
+          const msgs = fresh.list();
+          logLine(`[smoke] 持久化消息数：${msgs.length}（最后一条角色：${msgs[msgs.length - 1]?.role ?? "无"}）`);
+          // 面板界面截图（聊天页 + 终端页）
+          const shotBase = process.env.SASSDESK_PANEL_SHOT;
+          if (shotBase && panelWin && !panelWin.isDestroyed()) {
+            await new Promise((r) => setTimeout(r, 800));
+            const chatShot = await panelWin.webContents.capturePage();
+            fs.writeFileSync(`${shotBase}-chat.png`, chatShot.toPNG());
+            await panelWin.webContents.executeJavaScript('document.querySelector(\'[data-view="term"]\')?.click()');
+            await new Promise((r) => setTimeout(r, 500));
+            const termShot = await panelWin.webContents.capturePage();
+            fs.writeFileSync(`${shotBase}-term.png`, termShot.toPNG());
+            logLine(`[smoke] 面板截图已保存：${shotBase}-chat.png / ${shotBase}-term.png`);
+          }
+        } catch (e) {
+          logLine(`[smoke] 失败：${(e as Error).message}`);
+        } finally {
+          setTimeout(() => app.quit(), 800);
+        }
+      })();
+    }, 2_500);
+  }
+
   ipcMain.handle("input:submit", (_e, text: string) => handleSubmit(text));
   ipcMain.handle("model:read", () => readModelFiles());
-  ipcMain.on("pet:openInput", () => createInputWindow());
+  // 控制面板：聊天
+  ipcMain.handle("chat:history", () => chatStore?.list() ?? []);
+  ipcMain.handle("chat:send", (_e, text: string) => handleChatSend(text));
+  ipcMain.handle("chat:clear", () => {
+    chatStore?.clear();
+  });
+  // 控制面板：CLI / 桌宠 / 面板自身
+  ipcMain.handle("cli:open", () => openCliWindow());
+  ipcMain.handle("pet:info", () => {
+    const info = readPetInfoLocal();
+    return { running: Boolean(info), port: info?.port };
+  });
+  ipcMain.on("panel:action", (_e, action: "back" | "close") => {
+    if (action === "close") panelWin?.close();
+    else panelWin?.hide(); // 回到桌宠
+  });
+  ipcMain.on("pet:openInput", () => createPanelWindow());
+  ipcMain.handle("pet:show", () => createPetWindow());
   ipcMain.on("pet:diag", (_e, msg: string) => {
     logLine(`[SassDesk] 渲染诊断：${msg}`);
     // 回退等情况用气泡直接告知用户（渲染正常时不打扰）

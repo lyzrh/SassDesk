@@ -13,7 +13,7 @@ const srcRenderer = path.join(root, "src", "desktop", "renderer");
 const distRenderer = path.join(root, "dist", "desktop", "renderer");
 
 fs.mkdirSync(distRenderer, { recursive: true });
-for (const f of ["index.html", "input.html"]) {
+for (const f of ["index.html", "input.html", "panel.html"]) {
   fs.copyFileSync(path.join(srcRenderer, f), path.join(distRenderer, f));
   console.log("copied", f);
 }

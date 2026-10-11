@@ -20,4 +20,16 @@ contextBridge.exposeInMainWorld("sassdesk", {
   reportDiag: (msg) => ipcRenderer.send("pet:diag", msg),
   /** 读取 Live2D 模型全量文件（主进程 fs 读取，绕开 file:// fetch 限制）。 */
   readModelFiles: () => ipcRenderer.invoke("model:read"),
+  /** 控制面板：聊天记录（持久化在 data/chat.json） */
+  chatHistory: () => ipcRenderer.invoke("chat:history"),
+  chatSend: (text) => ipcRenderer.invoke("chat:send", text),
+  chatClear: () => ipcRenderer.invoke("chat:clear"),
+  /** 控制面板：流式增量与完成事件 */
+  onChatDelta: (cb) => ipcRenderer.on("chat:delta", (_e, data) => cb(data)),
+  onChatDone: (cb) => ipcRenderer.on("chat:done", (_e, data) => cb(data)),
+  /** 控制面板：打开 CLI / 查询桌宠 / 面板自身动作 */
+  openCli: () => ipcRenderer.invoke("cli:open"),
+  petInfo: () => ipcRenderer.invoke("pet:info"),
+  showPet: () => ipcRenderer.invoke("pet:show"),
+  panelAction: (action) => ipcRenderer.send("panel:action", action),
 });

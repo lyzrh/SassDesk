@@ -23,6 +23,15 @@ export interface SassDeskPetConfig {
   render?: { pma: boolean; scale: number; noMotion?: boolean };
 }
 
+/** 控制面板聊天消息视图 */
+export interface ChatMessageView {
+  id: string;
+  role: "user" | "assistant" | "system";
+  text: string;
+  ts: number;
+  partial?: boolean;
+}
+
 export interface SassDeskCursorData {
   x: number; // -1..1（窗口中心为 0）
   y: number;
@@ -37,6 +46,20 @@ export interface SassDeskBridge {
   submit(text: string): Promise<{ ok: boolean; reply: string }>;
   openInput(): void;
   reportDiag(msg: string): void;
+  /** 聊天：历史（持久化 data/chat.json） */
+  chatHistory(): Promise<ChatMessageView[]>;
+  chatSend(text: string): Promise<{ ok: boolean; reply: string }>;
+  chatClear(): Promise<void>;
+  onChatDelta(cb: (data: { id: string; text: string }) => void): void;
+  onChatDone(cb: (data: { id: string; text: string; ok: boolean }) => void): void;
+  /** 打开 CLI 窗口（面板终端页入口） */
+  openCli(): Promise<{ ok: boolean; message: string }>;
+  /** 桌宠在线信息（面板展示） */
+  petInfo(): Promise<{ running: boolean; port?: number }>;
+  /** 显示桌宠窗口 */
+  showPet(): Promise<void>;
+  /** 面板自身动作：back=回到桌宠（隐藏面板），close=关闭 */
+  panelAction(action: "back" | "close"): void;
   readModelFiles(): Promise<{
     modelDirName: string;
     settings: {

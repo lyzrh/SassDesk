@@ -101,33 +101,46 @@ if (!window.sassdesk) {
   setLoadPhase("error");
   (errorEl.querySelector(".tip") as HTMLElement).textContent = "preload 未加载，请重启桌宠";
 } else {
-  let live2dHost: import("./live2d-host.js").Live2DHost | null = null;
+  let native: import("./live2d-native.js").Live2DNative | null = null;
   let usingLive2D = false;
 
   window.sassdesk.onConfig(async (data) => {
     config = data;
     console.log(`[pet] config 就绪：${Object.keys(data.manifest.states).length} 个状态，素材目录 ${data.assetsDirUrl}`);
-    // Live2D 优先：主进程探测到模型时启用 PIXI 引擎（打包 bundle；失败则回退 SVG rig）
+    // Live2D 优先：主进程探测到模型时启用 core 原生渲染（失败则回退 SVG rig）
     if (data.live2dModelUrl && !usingLive2D) {
       try {
-        const mod = (await import("./l2d-bundle.js")) as { Live2DHost: new (c: HTMLElement) => import("./live2d-host.js").Live2DHost };
-        live2dHost = new mod.Live2DHost(document.getElementById("l2d-container") as HTMLElement);
-        await live2dHost.init(data.live2dModelUrl);
+        const coreObj = (window as unknown as { Live2D?: Record<string, unknown> }).Live2D;
+        console.log(`[pet] core 检查: type=${typeof coreObj} keys=${coreObj ? Object.keys(coreObj).slice(0, 12).join(",") : "无"}`);
+        const { Live2DNative } = await import("./live2d-native.js");
+        const files = await window.sassdesk.readModelFiles();
+        if (!files) throw new Error("模型文件读取失败");
+        native = new Live2DNative();
+        await native.init(files);
         usingLive2D = true;
-        (document.getElementById("l2d-container") as HTMLElement).classList.remove("hidden");
+        const container = document.getElementById("l2d-container") as HTMLElement;
+        container.classList.remove("hidden");
+        const c = native.canvasEl;
+        if (c) {
+          c.style.width = "240px";
+          c.style.height = "auto";
+          c.style.position = "absolute";
+          c.style.left = "0";
+          c.style.bottom = "0";
+          container.appendChild(c);
+        }
         (document.getElementById("pet-img") as HTMLImageElement).style.display = "none";
         loadingEl.classList.add("hidden");
-        console.log("[pet] Live2D 引擎已启用");
+        console.log("[pet] Live2D 原生渲染已启用");
         return;
       } catch (e) {
         console.warn(`[pet] Live2D 初始化失败，回退 SVG rig：${(e as Error).message}`);
-        // 清理半初始化的 Live2D（canvas 等），确保 rig 可见
         try {
-          live2dHost?.destroy();
+          native?.destroy();
         } catch {
           /* 忽略 */
         }
-        live2dHost = null;
+        native = null;
         (document.getElementById("l2d-container") as HTMLElement).classList.add("hidden");
         (document.getElementById("pet-img") as HTMLImageElement).style.display = "";
         showBubble("Live2D 渲染不可用，已切换内置角色", true);
@@ -136,22 +149,23 @@ if (!window.sassdesk) {
     applyState(currentState);
   });
   window.sassdesk.onState(({ state, reason }) => {
-    if (usingLive2D && live2dHost) {
-      live2dHost.setState({ state, reason });
+    if (usingLive2D && native) {
+      native.setState(state);
       if (state === "error" && reason) showBubble(`遇到问题了…${reason}`.slice(0, 90), false);
       return;
     }
     applyState(state, reason);
   });
   window.sassdesk.onCursor(({ x, y, inside }) => {
-    if (usingLive2D && live2dHost) live2dHost.lookAt(x, y, inside);
+    if (usingLive2D && native) native.lookAt(x, y, inside);
   });
   // 点击角色 → Live2D click 动作（m05）；双击 → 打开对话输入窗
   const petEl = document.getElementById("pet") as HTMLElement;
   petEl.addEventListener("click", () => {
-    if (usingLive2D && live2dHost) live2dHost.tap();
+    if (usingLive2D && native) native.tap();
   });
   petEl.addEventListener("dblclick", () => {
     window.sassdesk.openInput();
-  });  window.sassdesk.onBubble(({ text, accent }) => showBubble(text, accent));
+  });
+  window.sassdesk.onBubble(({ text, accent }) => showBubble(text, accent));
 }

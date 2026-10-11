@@ -27,3 +27,5 @@ Thumbs.db
 
 # Live2D 模型（许可未确认，本地使用不入库；来源见 README）
 assets/models/
+assets/model-unsupported/
+logs/

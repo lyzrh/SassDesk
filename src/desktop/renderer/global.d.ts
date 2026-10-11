@@ -35,6 +35,19 @@ export interface SassDeskBridge {
   submit(text: string): Promise<{ ok: boolean; reply: string }>;
   openInput(): void;
   reportDiag(msg: string): void;
+  readModelFiles(): Promise<{
+    modelDirName: string;
+    settings: {
+      model: string;
+      textures: string[];
+      physics?: string;
+      motions?: Record<string, Array<{ file: string }>>;
+      layout?: { center_x?: number; center_y?: number; width?: number };
+    };
+    moc: Uint8Array;
+    textures: Uint8Array[];
+    motions: Record<string, Uint8Array[]>;
+  } | null>;
 }
 
 declare global {

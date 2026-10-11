@@ -25,13 +25,6 @@ fs.mkdirSync(path.join(root, "dist", "desktop", "renderer", "vendor"), { recursi
 fs.copyFileSync(path.join(root, "src", "desktop", "renderer", "vendor", "live2d.min.js"), path.join(root, "dist", "desktop", "renderer", "vendor", "live2d.min.js"));
 console.log("copied vendor/live2d.min.js (Cubism 2 core)");
 
-// esbuild 打包 Live2D 引擎（pixi + pixi-live2d-display 内联为单文件，渲染层浏览器 ESM 可解析）
-const { execSync } = await import("node:child_process");
-execSync(
-  'npx esbuild src/desktop/renderer/live2d-host.ts --bundle --format=esm --outfile=dist/desktop/renderer/l2d-bundle.js --log-level=warning',
-  { stdio: "inherit" },
-);
-console.log("bundled l2d-bundle.js");
 
 // Electron 主进程 ESM 入口必须是 .mjs（否则 import "electron" 命中 npm 包而非内置模块）
 fs.copyFileSync(path.join(root, "dist", "desktop", "main.js"), path.join(root, "dist", "desktop", "main.mjs"));

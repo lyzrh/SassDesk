@@ -19,13 +19,27 @@ import { PetController } from "./pet-controller.js";
 const here = path.dirname(fileURLToPath(import.meta.url)); // dist/desktop
 const rendererDir = path.join(here, "renderer");
 
-// 透明窗口 + 硬件 GPU 合成在部分 Windows 驱动组合下会导致 WebGL canvas 不可见
-// （DOM 正常、模型消失）。桌宠是小窗口低负载场景，默认走软件合成保证可见性；
-// 需要 GPU 时设 SASSDESK_GPU=1。
-if (process.env.SASSDESK_GPU !== "1") {
-  app.disableHardwareAcceleration();
-  app.commandLine.appendSwitch("enable-transparent-visuals");
+/** 日志落盘（排障用）：logs/desktop-YYYY-MM-DD.log，渲染层 console 一并写入。 */
+const desktopLogPath = path.join(path.resolve(here, "..", ".."), "logs", `desktop-${new Date().toISOString().slice(0, 10)}.log`);
+function logLine(msg: string): void {
+  console.log(msg);
+  try {
+    fs.mkdirSync(path.dirname(desktopLogPath), { recursive: true });
+    fs.appendFileSync(desktopLogPath, `[${new Date().toISOString()}] ${msg}\n`);
+  } catch {
+    // 日志失败不影响运行
+  }
 }
+
+// 透明窗口 + WebGL 合成兼容组合（社区验证）：
+// - 保留 GPU 加速让 WebGL（Live2D）正常绘制
+// - disable-gpu-compositing：窗口合成走软件路径，修复"DOM 可见但 canvas 空白"
+// 可用 SASSDESK_SOFTWARE=1 强制全软件渲染（极端兼容模式）。
+if (process.env.SASSDESK_SOFTWARE === "1") {
+  app.disableHardwareAcceleration();
+}
+app.commandLine.appendSwitch("enable-transparent-visuals");
+app.commandLine.appendSwitch("disable-gpu-compositing");
 
 /**
  * 角色素材目录解析：
@@ -40,7 +54,7 @@ function resolveCharAssetsDir(): string {
   ];
   for (const c of candidates) {
     if (fs.existsSync(path.join(c, "manifest.json"))) {
-      console.log(`[SassDesk] 素材目录：${c}`);
+      logLine(`[SassDesk] 素材目录：${c}`);
       return c;
     }
   }
@@ -77,7 +91,7 @@ function resolveLive2dModel(): string | undefined {
       const entry = fs.readdirSync(dir).find((f) => f.endsWith(".model3.json") || f === "model.sassdesk.json" || f === "model.json");
       if (entry) {
         const url = pathToFileURL(path.join(dir, entry)).href;
-        console.log(`[SassDesk] Live2D 模型：${url}`);
+        logLine(`[SassDesk] Live2D 模型：${url}`);
         return url;
       }
     }
@@ -137,6 +151,40 @@ function pushBubble(text: string, accent = false): void {
   petWin?.webContents.send("pet:bubble", { text, accent });
 }
 
+/** 读取 Live2D 模型全量文件（渲染层经 IPC 获取，绕开 file:// fetch 限制）。 */
+function readModelFiles(): {
+  modelDirName: string;
+  settings: unknown;
+  moc: Uint8Array;
+  textures: Uint8Array[];
+  motions: Record<string, Uint8Array[]>;
+} | null {
+  if (!live2dModelUrl) return null;
+  try {
+    const modelJsonPath = fileURLToPath(live2dModelUrl);
+    const dir = path.dirname(modelJsonPath);
+    // 优先用语义化适配版配置（idle/thinking/working/success/click）
+    const adaptedPath = path.join(dir, "model.sassdesk.json");
+    const settingsPath = fs.existsSync(adaptedPath) ? adaptedPath : modelJsonPath;
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8")) as {
+      model: string;
+      textures: string[];
+      motions?: Record<string, Array<{ file: string }>>;
+    };
+    const moc = fs.readFileSync(path.join(dir, settings.model));
+    const textures = settings.textures.map((t) => fs.readFileSync(path.join(dir, t)));
+    const motions: Record<string, Uint8Array[]> = {};
+    for (const [group, list] of Object.entries(settings.motions ?? {})) {
+      motions[group] = list.map((m) => fs.readFileSync(path.join(dir, m.file)));
+    }
+    logLine(`[SassDesk] 模型文件读取：${Object.keys(motions).join("/")} 动作组，贴图 ${textures.length} 张`);
+    return { modelDirName: path.basename(dir), settings, moc, textures, motions };
+  } catch (e) {
+    logLine(`[SassDesk] 模型文件读取失败：${(e as Error).message}`);
+    return null;
+  }
+}
+
 function createPetWindow(): void {
   if (petWin && !petWin.isDestroyed()) {
     petWin.show();
@@ -167,10 +215,10 @@ function createPetWindow(): void {
   petWin.setMenuBarVisibility(false);
   // 诊断：转发渲染层 console 与页面加载失败（图片 404 / CSP 拦截 / preload 异常都会在这里现形）
   petWin.webContents.on("console-message", (_e, _level, message, line, sourceId) => {
-    console.log(`[renderer] ${message} (${path.basename(sourceId)}:${line})`);
+    logLine(`[renderer] ${message} (${path.basename(sourceId)}:${line})`);
   });
   petWin.webContents.on("did-fail-load", (_e, code, desc, url) => {
-    console.error(`[did-fail-load] ${code} ${desc} ${url}`);
+    logLine(`[did-fail-load] ${code} ${desc} ${url}`);
   });
   void petWin.loadFile(path.join(rendererDir, "index.html"));
   petWin.webContents.on("did-finish-load", () => {
@@ -280,9 +328,10 @@ app.whenReady().then(() => {
   startCursorPolling();
 
   ipcMain.handle("input:submit", (_e, text: string) => handleSubmit(text));
+  ipcMain.handle("model:read", () => readModelFiles());
   ipcMain.on("pet:openInput", () => createInputWindow());
   ipcMain.on("pet:diag", (_e, msg: string) => {
-    console.log(`[SassDesk] 渲染诊断：${msg}`);
+    logLine(`[SassDesk] 渲染诊断：${msg}`);
     // 回退等情况用气泡直接告知用户（渲染正常时不打扰）
     if (msg.includes("异常") || msg.includes("失败") || msg.includes("回退")) {
       setTimeout(() => pushBubble(msg.slice(0, 60), false), 500);
@@ -294,7 +343,7 @@ app.whenReady().then(() => {
   setTimeout(() => petWin?.setAlwaysOnTop(false), 3_000);
   setTimeout(() => pushBubble("你好！双击我可以派活；右键托盘也能找我～", true), 3_200);
 
-  console.log("[SassDesk] 桌宠已启动（托盘可对话/隐藏/退出）。配置目录：" + ctx.configDir);
+  logLine("[SassDesk] 桌宠已启动（托盘可对话/隐藏/退出）。配置目录：" + ctx.configDir);
 });
 
 app.on("window-all-closed", () => {

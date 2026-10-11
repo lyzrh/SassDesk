@@ -75,8 +75,9 @@ npm run desktop     # 或双击 start-desktop.cmd
 - 托盘「对话…」弹输入小窗 → 真实 Agent 执行 → 结果以气泡展示
 - 状态机由**真实事件驱动**（用户输入 / Agent 生命周期 / 结构化成败判定），不靠关键词匹配
 - **双角色引擎**：
-  - **Live2D 引擎**（默认，检测到 `assets/models/` 下的 Cubism 2 模型时自动启用）：pixi.js + pixi-live2d-display + Cubism 2 core，状态→动作映射（等待/思考/工作/完成/点击），全局鼠标视线跟随，支持点击动作；模型目录已 gitignore（本地使用，来源：model.hacxy.cn/hallo）
+  - **Live2D 引擎**（默认，检测到 `assets/models/` 下的 Cubism 2 模型时自动启用）：自研原生渲染（core 官方 API + 自实现 .mtn 播放器），支持状态→动作映射、全局鼠标视线跟随、点击动作、随机眨眼。当前模型：**shizuku**（Live2D 官方示例模型，本地测试用）
   - **内置 SVG rig**（无模型时的回退）：部件化肢体动画（眨眼/尾巴波浪/打字/弹跳），素材见 `assets/characters/sass/`
+  - 模型兼容性说明：`assets/model-unsupported/README.md`（hallo 为 ViewerEX 导出格式，与标准运行时不兼容已停用）；**换模型标准**：Cubism 2 SDK 导出的 `model.json`（含 .moc + 贴图 + .mtn 动作），放入 `assets/models/<名字>/` 重启即可
 - 隐私与安全：不设开机自启、不开麦克风监听、不截屏；`contextIsolation` 开启、渲染进程无 Node 能力
 
 ## CLI 内置命令

@@ -18,4 +18,6 @@ contextBridge.exposeInMainWorld("sassdesk", {
   openInput: () => ipcRenderer.send("pet:openInput"),
   /** 上报渲染诊断（主进程以气泡展示）。 */
   reportDiag: (msg) => ipcRenderer.send("pet:diag", msg),
+  /** 读取 Live2D 模型全量文件（主进程 fs 读取，绕开 file:// fetch 限制）。 */
+  readModelFiles: () => ipcRenderer.invoke("model:read"),
 });

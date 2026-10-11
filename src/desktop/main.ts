@@ -308,7 +308,7 @@ function createPetWindow(): void {
             app.quit();
           }
         })();
-      }, 7_000);
+      }, Number(process.env.SASSDESK_SHOT_DELAY ?? 7000));
     }
   });
 }

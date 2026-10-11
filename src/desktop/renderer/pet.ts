@@ -108,7 +108,11 @@ if (!window.sassdesk) {
     config = data;
     console.log(`[pet] config 就绪：${Object.keys(data.manifest.states).length} 个状态，素材目录 ${data.assetsDirUrl}`);
     // Live2D 优先：作者库 l2d（管线经模型站全量模型验证）
-    if (data.live2dModelUrl && !usingLive2D) {
+    if (data.live2dModelUrl) {
+      // 有 Live2D 模型时隐藏 SVG rig，杜绝"狐狸闪现→模型"的两段式显示
+      (document.getElementById("pet-img") as HTMLImageElement).style.display = "none";
+      if (usingLive2D) return; // 已启用，不重复初始化
+      setLoadPhase("loading");
       try {
         const { Live2DL2DHost } = await import("./l2d-bundle.js");
         const canvas = document.createElement("canvas");
@@ -126,10 +130,9 @@ if (!window.sassdesk) {
         host = new Live2DL2DHost();
         await host.init(canvas, data.live2dModelUrl, 1, [0, 0], container);
         usingLive2D = true;
-        (document.getElementById("pet-img") as HTMLImageElement).style.display = "none";
+        host.setState(currentState);
         loadingEl.classList.add("hidden");
         console.log("[pet] Live2D 引擎已启用（l2d）");
-        return;
       } catch (e) {
         console.error("[pet] Live2D 初始化失败：" + (e as Error).message, (e as Error).stack);
         try {
@@ -138,11 +141,16 @@ if (!window.sassdesk) {
           /* 忽略 */
         }
         host = null;
+        // 仅在 Live2D 真失败时回退内置角色
         (document.getElementById("l2d-container") as HTMLElement).classList.add("hidden");
         (document.getElementById("pet-img") as HTMLImageElement).style.display = "";
+        loadingEl.classList.add("hidden");
+        applyState(currentState);
         showBubble("Live2D 渲染不可用，已切换内置角色", true);
       }
+      return;
     }
+    // 无 Live2D 模型：使用内置 SVG rig
     applyState(currentState);
   });
   window.sassdesk.onState(({ state, reason }) => {

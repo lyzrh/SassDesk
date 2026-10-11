@@ -15,10 +15,10 @@ export interface CharacterConfig {
   style: string;
 }
 
-export function defaultCharacter(name = "大肥鱼"): CharacterConfig {
+export function defaultCharacter(name = "Sass"): CharacterConfig {
   return {
     name,
-    description: "SassDesk 的默认角色：一条憨态可掬、办事靠谱的大肥鱼。",
+    description: "SassDesk 的默认角色：一条憨态可掬、办事靠谱的 Sass。",
     states: {
       idle: "assets/characters/idle.png",
       listening: "assets/characters/listening.png",

@@ -17,6 +17,7 @@ export interface LoadConfigOptions {
 export function defaultConfig(): AppConfig {
   return {
     llm: {
+      enabled: true,
       provider: "openai",
       model: "gpt-4o-mini",
       baseUrl: "",
@@ -34,7 +35,7 @@ export function defaultConfig(): AppConfig {
       qqmusicPath: "",
     },
     character: {
-      name: "大肥鱼",
+      name: "Sass",
     },
     logging: {
       level: "info",
@@ -85,6 +86,11 @@ export function loadConfig(options: LoadConfigOptions = {}): { config: AppConfig
     throw new SassDeskError("CONFIG_INVALID", `配置校验失败：${errors}`, { merged });
   }
   const config = structuredClone(merged) as unknown as AppConfig;
+
+  // 旧配置迁移：历史角色名"大肥鱼"统一为 Sass
+  if ((config.character as { name?: string }).name === "大肥鱼") {
+    (config.character as { name?: string }).name = "Sass";
+  }
 
   // 环境变量覆盖 LLM API Key（最高优先级）
   const envKey = pickEnvKey(env, config.llm.provider);

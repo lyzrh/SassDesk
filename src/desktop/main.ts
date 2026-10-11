@@ -15,6 +15,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } from "electron";
+import type { PetState } from "./state-machine.js";
 import { bootstrapApp, type AppContext } from "../app/bootstrap.js";
 import { PetController } from "./pet-controller.js";
 
@@ -80,6 +81,9 @@ let petWin: BrowserWindow | null = null;
 let inputWin: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let agent: Awaited<ReturnType<AppContext["ensureAgent"]>> | null = null;
+/** 桌宠服务端口（固定端口供 CLI 发现；被占用自动回退随机）。 */
+const PET_PORT = 22345;
+
 /** Live2D 模型配置（探测到 assets/models 下的 model*.json 时启用）。 */
 let live2dModelUrl: string | undefined;
 /** 本地模型 HTTP 服务基址（渲染层库按相对路径加载 moc/贴图/motion 需 http URL）。 */
@@ -90,6 +94,34 @@ let modelServer: http.Server | null = null;
 function startModelServer(): void {
   const modelsRoot = path.join(root(), "assets", "models");
   modelServer = http.createServer((req, res) => {
+    // CLI 状态同步端点：POST /pet/state { state, reason? }
+    if (req.method === "POST" && (req.url ?? "").startsWith("/pet/state")) {
+      let body = "";
+      req.on("data", (chunk: Buffer) => {
+        body += chunk.toString("utf-8");
+        if (body.length > 8192) req.destroy();
+      });
+      req.on("end", () => {
+        try {
+          const data = JSON.parse(body || "{}") as { state?: string; reason?: string };
+          if (data.state) {
+            pushState(data.state as PetState, data.reason);
+            logLine(`[pet-bridge] 收到 CLI 状态：${data.state}${data.reason ? `（${data.reason.slice(0, 60)}）` : ""}`);
+            res.statusCode = 200;
+            res.setHeader("Content-Type", "application/json");
+            res.end('{"ok":true}');
+            return;
+          }
+        } catch {
+          /* 落回 400 */
+        }
+        res.statusCode = 400;
+        res.setHeader("Content-Type", "application/json");
+        res.end('{"ok":false}');
+      });
+      return;
+    }
+    // 静态：模型文件
     const urlPath = decodeURIComponent(((req.url ?? "/").split("?")[0]) ?? "/");
     const filePath = path.normalize(path.join(modelsRoot, urlPath));
     if (!filePath.startsWith(modelsRoot)) {
@@ -114,11 +146,30 @@ function startModelServer(): void {
       res.end(data);
     });
   });
-  modelServer.listen(0, "127.0.0.1", () => {
+  // 优先固定端口（CLI 侧按此发现桌宠）；被占用则回退随机端口
+  const announce = () => {
     const addr = modelServer?.address() as AddressInfo;
     modelServerBase = `http://127.0.0.1:${addr.port}`;
     logLine(`[SassDesk] 模型服务已启动：${modelServerBase}（仅本地）`);
+    // 写发现文件供 CLI 读取（连接/启动桌宠）
+    try {
+      fs.writeFileSync(
+        path.join(ctx.configDir, "pet.json"),
+        JSON.stringify({ port: addr.port, pid: process.pid, startedAt: new Date().toISOString() }, null, 1),
+      );
+    } catch (e) {
+      logLine(`[SassDesk] 写 pet.json 失败：${(e as Error).message}`);
+    }
+  };
+  modelServer.once("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      logLine(`[SassDesk] 端口 ${PET_PORT} 被占用，改用随机端口`);
+      modelServer?.listen(0, "127.0.0.1", announce);
+    } else {
+      logLine(`[SassDesk] 模型服务启动失败：${err.message}`);
+    }
   });
+  modelServer.listen(PET_PORT, "127.0.0.1", announce);
 }
 
 /** 探测 Live2D 模型（assets/models/<name>/model*.json，第一个命中者）。 */
@@ -155,7 +206,11 @@ function startCursorPolling(): void {
       // 屏幕信息不可用时静默跳过
     }
   }, 33);
-  app.on("before-quit", () => { clearInterval(timer); modelServer?.close(); });
+  app.on("before-quit", () => {
+    clearInterval(timer);
+    modelServer?.close();
+    try { fs.rmSync(path.join(ctx.configDir, "pet.json"), { force: true }); } catch { /* 忽略 */ }
+  });
 }
 
 function clamp(v: number, min: number, max: number): number {

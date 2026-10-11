@@ -8,6 +8,7 @@ import { SassDeskError } from "../../shared/errors.js";
 import type { AppContext } from "../bootstrap.js";
 import { transcribeWithWhisper } from "../voice/providers/whisper.js";
 import { VoiceError } from "../voice/types.js";
+import { isPetRunning, pushPetState, readPetInfo, startPet } from "./petBridge.js";
 
 /** 状态中文标签（CLI 状态提示用）。 */
 const STATE_LABELS: Record<string, string> = {
@@ -55,7 +56,9 @@ const HELP_TEXT = [
   "  /help              显示帮助",
   "  /rules             查看自动化规则",
   "  /startup           查看开机启动状态",
-  "  /pet               查看 Sass 当前状态",
+  "  /pet               查看 Sass 状态与桌宠连接状态",
+  "  /pet start         启动桌面桌宠（Live2D 角色）",
+  "  /api [on|off]      查看/切换是否接入模型 API（off=纯命令模式，不需要 Key）",
   "  /voice             按键录音并语音识别（需 voice.provider=sapi，音频不出本机）",
   "  /voice-file <路径>  用 Whisper 兼容服务转写音频文件（音频会上传到配置的服务）",
   "  /prefs             查看音乐偏好",
@@ -70,9 +73,13 @@ export async function startRepl(ctx: AppContext): Promise<void> {
   });
 
   const approval = new InteractiveApprovalHandler(rl);
+  // API 接入开关（/api on|off 会话内即时生效并写入 config.local.json）
+  let apiEnabled = ctx.config.llm.enabled;
   // 角色状态机：由真实用户交互与 Agent 生命周期事件驱动
   const pet = new PetController();
   pet.subscribe(({ to, reason }) => {
+    // CLI 状态实时同步给桌宠窗口（桌宠未运行则静默）
+    void pushPetState(ctx.configDir, to, reason);
     const tag = STATE_LABELS[to] ?? to;
     process.stdout.write(`\n[Sass] ${tag}${to === "error" && reason ? `（${reason.split("\n")[0]?.slice(0, 60)}）` : ""}\n`);
     rl.prompt(true);
@@ -120,6 +127,14 @@ export async function startRepl(ctx: AppContext): Promise<void> {
     }
     if (input.startsWith("/")) {
       await handleCommand(input);
+      rl.prompt();
+      return;
+    }
+
+    // API 未接入：纯命令模式，不调用模型
+    if (!apiEnabled) {
+      console.log("当前未接入 API（纯命令模式）。可用：/help /rules /startup /pet /prefs /voice");
+      console.log("开启模型能力：/api on");
       rl.prompt();
       return;
     }
@@ -185,7 +200,41 @@ export async function startRepl(ctx: AppContext): Promise<void> {
         return;
       }
       case "/pet": {
+        if (rest[0] === "start") {
+          console.log("正在启动桌宠…");
+          const r = await startPet(ctx.configDir);
+          console.log(r.message);
+          return;
+        }
         console.log(`[Sass] 当前状态：${STATE_LABELS[pet.state] ?? pet.state}`);
+        const info = readPetInfo(ctx.configDir);
+        if (await isPetRunning(ctx.configDir)) {
+          console.log(`桌宠：运行中（端口 ${info?.port}）— CLI 状态会实时同步过去`);
+        } else {
+          console.log("桌宠：未运行（/pet start 启动；启动后 CLI 状态自动同步）");
+        }
+        return;
+      }
+      case "/api": {
+        const sub = (rest[0] ?? "").toLowerCase();
+        const cfgPath = path.join(ctx.configDir, "config.local.json");
+        if (sub === "on" || sub === "off") {
+          const enabled = sub === "on";
+          let local: Record<string, unknown> = {};
+          try {
+            local = JSON.parse(fs.readFileSync(cfgPath, "utf-8")) as Record<string, unknown>;
+          } catch {
+            /* 文件不存在则新建 */
+          }
+          local.llm = { ...((local.llm as object) ?? {}), enabled };
+          fs.writeFileSync(cfgPath, JSON.stringify(local, null, 2));
+          apiEnabled = enabled;
+          console.log(enabled ? "已开启 API 接入（自然语言任务可用）" : "已关闭 API 接入：纯命令模式，斜杠命令照常可用，不需要 API Key");
+          return;
+        }
+        console.log(`API 接入：${apiEnabled ? "已开启" : "已关闭（纯命令模式）"}`);
+        console.log(`provider=${ctx.config.llm.provider} model=${ctx.config.llm.model} key=${ctx.config.llm.apiKey ? "已配置" : "未配置（走环境变量）"}`);
+        console.log("用法：/api off 关闭 | /api on 开启");
         return;
       }
       case "/voice": {

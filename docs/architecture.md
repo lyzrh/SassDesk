@@ -74,7 +74,7 @@ D:\SassDesk\
 │  │  ├─ preferences/           # 用户偏好
 │  │  ├─ automation/            # 规则 CRUD、状态机、开机执行器
 │  │  ├─ voice/                 # Recorder/SttProvider 接口 + mock/sapi/whisper 实现
-│  │  ├─ characters/            # 角色配置（默认"大肥鱼"）
+│  │  ├─ characters/            # 角色配置（默认"Sass"）
 │  │  ├─ music/                 # QQ 音乐启动器与状态
 │  │  ├─ system/                # process / windows / startup（可注入适配器）
 │  │  └─ storage/               # JsonStore
@@ -103,7 +103,7 @@ D:\SassDesk\
   },
   "voice": { "provider": "mock" },   // mock | sapi | whisper
   "music": { "qqmusicPath": "" },    // 留空自动探测常见安装位置
-  "character": { "name": "大肥鱼" },
+  "character": { "name": "Sass" },
   "logging": { "level": "info", "dir": "logs" }
 }
 ```

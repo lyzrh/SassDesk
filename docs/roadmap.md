@@ -7,7 +7,7 @@
 - 自动化规则：草稿 → 确认 → 启用（startup-auth）→ 开机执行 → JSONL 审计
 - Windows Startup Provider（HKCU Run，幂等、可查询、可撤销）
 - 语音管线：mock / SAPI 本地识别 / Whisper 云端转写（文件模式）
-- 角色配置（默认「大肥鱼」，仅 persona + 资源路径占位）
+- 角色配置（默认「Sass」，仅 persona + 资源路径占位）
 
 ## v0.2.0 方向
 

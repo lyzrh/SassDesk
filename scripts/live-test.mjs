@@ -28,7 +28,7 @@ async function run(label, text) {
   console.log(`\n======== ${label} ========`);
   console.log(`用户> ${text}`);
   const r = await agent.run(text);
-  console.log(`大肥鱼> ${r.text || "(无文本回复)"}`);
+  console.log(`Sass> ${r.text || "(无文本回复)"}`);
   if (r.toolCalls.length) console.log(`[工具调用] ${r.toolCalls.map((t) => `${t.name}${t.isError ? "(错误)" : ""}`).join(" → ")}`);
   if (r.errorMessage) console.log(`[模型错误] ${r.errorMessage}`);
   return r;

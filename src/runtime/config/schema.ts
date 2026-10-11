@@ -6,6 +6,8 @@ import { Type, type Static } from "typebox";
  */
 
 export const LlmConfigSchema = Type.Object({
+  /** 是否接入 API（false 时 CLI 走纯命令模式，不要求 API Key、不调用模型） */
+  enabled: Type.Boolean({ default: true, description: "是否接入模型 API" }),
   /** provider id：内置（openai/anthropic/deepseek/moonshot/zai/google/openrouter...）或 "openai-compatible" */
   provider: Type.String({ default: "openai", description: "模型提供商" }),
   model: Type.String({ default: "gpt-4o-mini", description: "模型 ID" }),
@@ -32,7 +34,7 @@ export const MusicConfigSchema = Type.Object({
 });
 
 export const CharacterConfigSchema = Type.Object({
-  name: Type.String({ default: "大肥鱼" }),
+  name: Type.String({ default: "Sass" }),
 });
 
 export const LoggingConfigSchema = Type.Object({

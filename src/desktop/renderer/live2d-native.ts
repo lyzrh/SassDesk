@@ -244,11 +244,10 @@ export class Live2DNative {
     if (!this.model) throw new Error("moc 解析失败");
 
     // 2. canvas + GL（core 自己的画布，官方模式）
-    const width = this.model.getCanvasWidth();
-    const height = this.model.getCanvasHeight();
+    //    分辨率用显示尺寸的 2 倍（480×520）：过高（原始 1280×1380）经 CSS 缩小会发糊
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = 480;
+    canvas.height = 520;
     const gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true });
     if (!gl) throw new Error("WebGL 不可用");
     gl.clearColor(0, 0, 0, 0);
@@ -318,8 +317,8 @@ export class Live2DNative {
     // 5. 矩阵：模型画布 (0..W, 0..H) → NDC 全画布，模型完整显示
     //    （hallo 自带的 layout=width 2.7/center_y -0.6 是 Live2DViewerEX 大窗口配置，
     //     在 240×280 桌宠窗口会把模型放大下移到几乎全出屏，故不采用）
-    const cw = width;
-    const ch = height;
+    const cw = this.model.getCanvasWidth();
+    const ch = this.model.getCanvasHeight();
     const m = [
       2 / cw, 0, 0, 0,
       0, -2 / ch, 0, 0,
@@ -331,8 +330,8 @@ export class Live2DNative {
 
     // 6. 首帧渲染 + 像素健康检查（模型必须真实输出像素）
     await this.renderFrame(0);
-    const health = this.checkPixels(gl, width, height);
-    console.log(`[live2d-native] 健康检查: ${health.ok ? "通过" : "失败"} - ${health.detail}（画布 ${width}×${height}）`);
+    const health = this.checkPixels(gl, canvas.width, canvas.height);
+    console.log(`[live2d-native] 健康检查: ${health.ok ? "通过" : "失败"} - ${health.detail}（渲染画布 ${canvas.width}×${canvas.height}）`);
     if (!health.ok) throw new Error(`模型无像素输出（${health.detail}）`);
 
     // 7. 启动循环
@@ -360,16 +359,24 @@ export class Live2DNative {
   private async renderFrame(dt: number): Promise<void> {
     if (!this.model || !this.gl) return;
     const gl = this.gl;
+    this.octx += dt;
 
     // 动作播放（自实现播放器）
     this.player.update(this.model);
     // pose 应用（motion 的 VISIBLE: 参数 → 部件互斥渐变）
     this.pose?.update(dt, this.model);
 
-    // 眨眼（自实现：2~5 秒随机，150ms 闭合曲线）
-    // 注意：参数覆盖范围严格限制在 core 参数标准域（避免超范围变形）；BARE=1 时只播 motion 排查参数干扰
-    const bare = (window as unknown as { SASSDESK_BARE?: string }).SASSDESK_BARE === "1" || new URLSearchParams(location.search).has("bare");
-    if (!bare) {
+    // 眨眼/鼠标跟随/摇头：**仅在无动作播放时**应用——
+    // 模型的 idle 动作自带完整表情（眨眼/眼球/头部），叠加覆盖会造成"白线眼"等表情崩坏
+    if (!this.player.playing) {
+      if (this.state === "sleeping") {
+        this.model.setParamFloat("PARAM_BREATH", ((Math.sin(this.octx * 1.6) + 1) / 2) * 0.6);
+      } else if (this.state === "listening" || this.state === "error") {
+        // 这些状态无动作：仅眨眼/跟随
+      } else {
+        // idle 类状态无动作兜底：轻呼吸
+        this.model.setParamFloat("PARAM_BREATH", (Math.sin(this.octx * 1.8) + 1) / 2);
+      }
       if (this.blinkPhase < 0) {
         this.blinkCountdown -= dt;
         if (this.blinkCountdown <= 0) {
@@ -381,12 +388,11 @@ export class Live2DNative {
         if (this.blinkPhase >= 1) this.blinkPhase = -1;
       }
       const eye = this.blinkPhase < 0 ? 1 : Math.abs(Math.cos(Math.PI * this.blinkPhase));
-      this.model.setParamFloat("PARAM_EYE_L_OPEN", this.state === "sleeping" ? 0 : this.state === "listening" ? 1 : eye);
-      this.model.setParamFloat("PARAM_EYE_R_OPEN", this.state === "sleeping" ? 0 : this.state === "listening" ? 1 : eye);
+      this.model.setParamFloat("PARAM_EYE_L_OPEN", this.state === "sleeping" ? 0 : eye);
+      this.model.setParamFloat("PARAM_EYE_R_OPEN", this.state === "sleeping" ? 0 : eye);
 
-      // 鼠标跟随（平滑插值到目标；working/sleeping 不看鼠标）
-      const targetX = this.state === "working" || this.state === "sleeping" ? 0 : this.cursorX * 30;
-      const targetY = this.state === "working" || this.state === "sleeping" ? -10 : -this.cursorY * 20;
+      const targetX = this.state === "sleeping" ? 0 : this.cursorX * 30;
+      const targetY = this.state === "sleeping" ? -10 : -this.cursorY * 20;
       const k = 1 - Math.pow(0.001, dt);
       this.angleX += (targetX - this.angleX) * k;
       this.angleY += (targetY - this.angleY) * k;
@@ -396,14 +402,12 @@ export class Live2DNative {
       this.model.setParamFloat("PARAM_ANGLE_Y", this.angleY);
       this.model.setParamFloat("PARAM_EYE_BALL_X", this.eyeX);
       this.model.setParamFloat("PARAM_EYE_BALL_Y", this.eyeY);
+    }
 
-      // error 状态摇头
-      if (this.state === "error") {
-        this.octx += dt;
-        this.model.setParamFloat("PARAM_ANGLE_Z", Math.sin(this.octx * 3.2) * 8);
-      } else {
-        this.model.setParamFloat("PARAM_ANGLE_Z", 0);
-      }
+    // error 状态摇头（叠加在动作之上，幅度小）
+    if (this.state === "error") {
+      this.octx += dt;
+      this.model.setParamFloat("PARAM_ANGLE_Z", Math.sin(this.octx * 3.2) * 8);
     }
 
     // 一次性动作播完回 idle

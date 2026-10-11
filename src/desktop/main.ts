@@ -236,17 +236,33 @@ function createPetWindow(): void {
     const shotPath = process.env.SASSDESK_SHOT;
     if (shotPath) {
       setTimeout(() => {
-        void petWin?.webContents
-          .capturePage()
-          .then((img) => {
-            fs.writeFileSync(shotPath, img.toPNG());
-            console.log(`[shot] 窗口截图已保存：${shotPath}`);
+        void (async () => {
+          try {
+            const img = await petWin?.webContents.capturePage();
+            if (img) {
+              fs.writeFileSync(shotPath, img.toPNG());
+              logLine(`[shot] 窗口截图已保存：${shotPath}`);
+            }
+            // Live2D canvas 原始渲染导出（高清模型特写，检验脸部/部件质量）
+            try {
+              const dataUrl = (await petWin?.webContents.executeJavaScript(
+                'window.__live2dCanvasShot ? window.__live2dCanvasShot() : null',
+                false,
+              )) as string | null;
+              if (dataUrl) {
+                const modelPath = shotPath.replace(/\.png$/, '-model.png');
+                fs.writeFileSync(modelPath, Buffer.from(dataUrl.split(',')[1] ?? '', 'base64'));
+                logLine(`[shot] 模型高清导出已保存：${modelPath}`);
+              }
+            } catch (e) {
+              logLine(`[shot] 模型导出失败：${(e as Error).message}`);
+            }
+          } catch (e) {
+            logLine(`[shot] 截图失败：${(e as Error).message}`);
+          } finally {
             app.quit();
-          })
-          .catch((e: Error) => {
-            console.error(`[shot] 截图失败：${e.message}`);
-            app.quit();
-          });
+          }
+        })();
       }, 7_000);
     }
   });

@@ -346,6 +346,8 @@ export class Live2DNative {
     };
     this.raf = requestAnimationFrame(loop);
     console.log("[live2d-native] 渲染循环已启动");
+    // 高清模型导出（调试）：主进程 executeJavaScript 调用，返回 canvas 原始渲染（1800×2200）
+    (window as unknown as { __live2dCanvasShot?: () => string }).__live2dCanvasShot = () => this.canvas!.toDataURL("image/png");
   }
 
   /** 解码贴图 bytes → ImageBitmap。 */

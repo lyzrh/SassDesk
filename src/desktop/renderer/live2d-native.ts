@@ -13,6 +13,15 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+export interface RenderOptions {
+  /** premultipliedAlpha：core 输出非预乘 alpha 时应声明 false，否则缩放合成会发白发花 */
+  pma: boolean;
+  /** 渲染分辨率倍数（相对显示 240×260） */
+  scale: number;
+  /** 调试：跳过 motion 播放（看默认姿势渲染） */
+  noMotion?: boolean;
+}
+
 export interface NativeModelFiles {
   /** model.json 解析结果 */
   settings: {
@@ -189,6 +198,12 @@ class MotionPlayer {
     for (const tr of this.motion.tracks) {
       model.setParamFloat(tr.id, sampleTrack(tr.values, frame));
     }
+    // 诊断：抽样打印眼部参数与轨道数（排查 mesh 错位）
+    if (Math.random() < 0.01) {
+      const el = model.getParamFloat(model.getParamIndex("PARAM_EYE_L_OPEN"));
+      const er = model.getParamFloat(model.getParamIndex("PARAM_EYE_R_OPEN"));
+      console.log(`[mtn] frame=${frame.toFixed(1)}/${this.motion.durationSec * this.motion.fps} tracks=${this.motion.tracks.length} EYE_L=${el.toFixed(2)} EYE_R=${er.toFixed(2)}`);
+    }
   }
 }
 
@@ -224,7 +239,8 @@ export class Live2DNative {
     return this.canvas;
   }
 
-  async init(files: NativeModelFiles): Promise<void> {
+  async init(files: NativeModelFiles, renderOptions?: RenderOptions): Promise<void> {
+    const opts: RenderOptions = { pma: renderOptions?.pma ?? false, scale: renderOptions?.scale ?? 2, noMotion: renderOptions?.noMotion ?? false };
     // Cubism 2 core 的类挂在不带命名空间的全局裸变量上（window.Live2D 只是版本函数）
     const g = window as unknown as {
       Live2DModelWebGL?: any;
@@ -243,12 +259,14 @@ export class Live2DNative {
     this.model = Live2DModelWebGL.loadModel(mocBytes.buffer as ArrayBuffer);
     if (!this.model) throw new Error("moc 解析失败");
 
-    // 2. canvas + GL（core 自己的画布，官方模式）
-    //    分辨率用显示尺寸的 2 倍（480×520）：过高（原始 1280×1380）经 CSS 缩小会发糊
+    // 2. canvas + GL（core 自己的画布）
+    //    分辨率 = 显示尺寸 × scale；pma 与 core 实际输出匹配（默认 false：core 输出非预乘）
+    const DISP_W = 240;
+    const DISP_H = 260;
     const canvas = document.createElement("canvas");
-    canvas.width = 480;
-    canvas.height = 520;
-    const gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true });
+    canvas.width = Math.round(DISP_W * opts.scale);
+    canvas.height = Math.round(DISP_H * opts.scale);
+    const gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: opts.pma, preserveDrawingBuffer: true });
     if (!gl) throw new Error("WebGL 不可用");
     gl.clearColor(0, 0, 0, 0);
     this.canvas = canvas;
@@ -335,7 +353,7 @@ export class Live2DNative {
     if (!health.ok) throw new Error(`模型无像素输出（${health.detail}）`);
 
     // 7. 启动循环
-    this.playGroup("idle");
+    if (!opts.noMotion) this.playGroup("idle");
     this.last = performance.now();
     const loop = (t: number) => {
       const dt = Math.min(0.05, (t - this.last) / 1000);

@@ -11,6 +11,8 @@
  */
 import path from "node:path";
 import fs from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } from "electron";
 import { bootstrapApp, type AppContext } from "../app/bootstrap.js";
@@ -80,6 +82,44 @@ let tray: Tray | null = null;
 let agent: Awaited<ReturnType<AppContext["ensureAgent"]>> | null = null;
 /** Live2D 模型配置（探测到 assets/models 下的 model*.json 时启用）。 */
 let live2dModelUrl: string | undefined;
+/** 本地模型 HTTP 服务基址（渲染层库按相对路径加载 moc/贴图/motion 需 http URL）。 */
+let modelServerBase = "";
+let modelServer: http.Server | null = null;
+
+/** 启动本地模型服务（仅伺服 assets/models，127.0.0.1 随机端口，端口零时自动分配）。 */
+function startModelServer(): void {
+  const modelsRoot = path.join(root(), "assets", "models");
+  modelServer = http.createServer((req, res) => {
+    const urlPath = decodeURIComponent(((req.url ?? "/").split("?")[0]) ?? "/");
+    const filePath = path.normalize(path.join(modelsRoot, urlPath));
+    if (!filePath.startsWith(modelsRoot)) {
+      res.statusCode = 403;
+      res.end();
+      return;
+    }
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        res.statusCode = 404;
+        res.end();
+        return;
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      const mime: Record<string, string> = {
+        ".json": "application/json",
+        ".png": "image/png",
+        ".mtn": "text/plain; charset=utf-8",
+        ".moc": "application/octet-stream",
+      };
+      res.setHeader("Content-Type", mime[ext] ?? "application/octet-stream");
+      res.end(data);
+    });
+  });
+  modelServer.listen(0, "127.0.0.1", () => {
+    const addr = modelServer?.address() as AddressInfo;
+    modelServerBase = `http://127.0.0.1:${addr.port}`;
+    logLine(`[SassDesk] 模型服务已启动：${modelServerBase}（仅本地）`);
+  });
+}
 
 /** 探测 Live2D 模型（assets/models/<name>/model*.json，第一个命中者）。 */
 function resolveLive2dModel(): string | undefined {
@@ -115,7 +155,7 @@ function startCursorPolling(): void {
       // 屏幕信息不可用时静默跳过
     }
   }, 33);
-  app.on("before-quit", () => clearInterval(timer));
+  app.on("before-quit", () => { clearInterval(timer); modelServer?.close(); });
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -229,7 +269,12 @@ function createPetWindow(): void {
     petWin?.webContents.send("pet:config", {
       manifest,
       assetsDirUrl,
-      live2dModelUrl,
+      live2dModelUrl: live2dModelUrl && modelServerBase ? modelServerBase + "/" + path.basename(path.dirname(fileURLToPath(live2dModelUrl))) + "/" + path.basename(fileURLToPath(live2dModelUrl)) : live2dModelUrl,
+      render: {
+        pma: process.env.SASSDESK_PMA !== "1",
+        scale: Number(process.env.SASSDESK_SCALE ?? 2),
+        noMotion: process.env.SASSDESK_NO_MOTION === "1",
+      },
     });
     pushState(pet.state);
     // 开发调试：SASSDESK_SHOT=<png路径> 时，等待渲染稳定后截取窗口画面并退出（用于验证视觉呈现）
@@ -338,6 +383,7 @@ app.whenReady().then(() => {
   ctx = bootstrapApp();
   manifest = loadManifest();
   live2dModelUrl = resolveLive2dModel();
+  startModelServer();
 
   pet = new PetController();
   pet.subscribe(({ from, to, reason }) => {

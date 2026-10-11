@@ -33,4 +33,8 @@ console.log("copied main.js → main.mjs (electron ESM entry)");
 const assetsSrc = path.join(root, "assets", "characters", "sass");
 const assetsDist = path.join(root, "dist", "assets", "characters", "sass");
 fs.cpSync(assetsSrc, assetsDist, { recursive: true });
-console.log("copied character assets");
+// esbuild 打包作者库 l2d 引擎（内联到单文件供渲染层导入）
+const { execSync } = await import('node:child_process');
+execSync('npx esbuild src/desktop/renderer/live2d-l2d.ts --bundle --format=esm --outfile=dist/desktop/renderer/l2d-bundle.js --log-level=warning', { stdio: 'inherit' });
+console.log('bundled l2d-bundle.js');
+console.log('copied character assets');

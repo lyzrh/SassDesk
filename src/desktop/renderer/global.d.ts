@@ -19,6 +19,8 @@ export interface SassDeskPetConfig {
   assetsDirUrl: string;
   /** Live2D 模型入口 URL（探测到 assets/models 下模型时提供）。 */
   live2dModelUrl?: string;
+  /** 渲染参数（pma 预乘 alpha 匹配、分辨率倍数）。 */
+  render?: { pma: boolean; scale: number; noMotion?: boolean };
 }
 
 export interface SassDeskCursorData {
